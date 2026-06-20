@@ -65,7 +65,8 @@ function DevDashboard({ onBack }) {
     "search_card_to_hand",
     "recruit_card_to_field",
     "generate_card_to_hand",
-    "generate_card_to_field"
+    "generate_card_to_field",
+    "discard_specific"
   ].includes(effectType);
 
   return (
@@ -163,6 +164,9 @@ function DevDashboard({ onBack }) {
               <option value="generate_card_to_hand">トークン：デッキ外からカードを生成して手札に加える</option>
               <option value="generate_card_to_field">トークン：デッキ外からカードを生成して場に出す</option>
               <option value="discard_all_hand">手札をすべて捨てる (discard_all_hand)</option>
+              <option value="discard_random">ランダムに手札を捨てる (discard_random)</option>
+              <option value="discard_specific">特定のカードを捨てる (discard_specific)</option>
+              <option value="discard_peeping">覗き見：ランダムに手札を捨てる (discard_peeping)</option>
             </select>
           </div>
 

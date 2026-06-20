@@ -1,8 +1,8 @@
 import React from 'react';
 import Card from './Card';
 
-function DeckBuilder({ 
-  title, themeColor, cardPool, deck, onAddCard, onRemoveCard, onSave, onBack, isEnemy 
+function DeckBuilder({
+  title, themeColor, cardPool, deck, onAddCard, onRemoveCard, onSave, onBack, isEnemy
 }) {
   return (
     <div id="deck-build-screen" style={{ borderTop: `4px solid ${themeColor}` }}>
@@ -32,12 +32,15 @@ function DeckBuilder({
         </div>
       </div>
       <div className="deck-build-footer" style={{ marginTop: '20px', textAlign: 'center' }}>
-        <button 
-          style={{ 
-            padding: '10px 20px', fontSize: '1.2rem', marginRight: '10px', 
-            background: themeColor, color: 'white', border: 'none',
-            cursor: deck.length === 20 ? 'pointer' : 'not-allowed', opacity: deck.length === 20 ? 1 : 0.5 
-          }} 
+        <button
+          style={{
+            padding: '10px 20px', fontSize: '1.2rem', marginRight: '10px',
+            background: themeColor,
+            color: themeColor === 'white' ? 'black' : 'white', // ★ ここを変更！
+            border: 'none',
+            cursor: deck.length === 20 ? 'pointer' : 'not-allowed',
+            opacity: deck.length === 20 ? 1 : 0.5
+          }}
           onClick={onSave} disabled={deck.length !== 20}
         >
           クラウドに保存
