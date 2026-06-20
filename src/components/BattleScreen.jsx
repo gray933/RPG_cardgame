@@ -1,146 +1,28 @@
-import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs } from 'firebase/firestore'; // 🌟 getDocsなどを追加
-import { db } from '../firebase'; // dbのインポートを確認
+// src/components/BattleScreen.jsx
+import React, { useState, useEffect } from 'react';
 import Card from './Card';
-import { useBattle } from '../hooks/useBattle'; // フックを読み込む
-
-const MANA_CARD = { name: "マナ結晶", cardType: "mana", effectText: "コスト用", image: "img/mana.png", isMana: true };
-
-// ==========================================
-// ⚙️ コアロジック：ドロー処理（山札切れ・手札上限）
-// ==========================================
-const processDraw = (drawCount, currentDeck, currentHand, currentGrave, currentLife, isPlayer) => {
-  let d = [...currentDeck];
-  let h = [...currentHand];
-  let g = [...currentGrave];
-  let life = currentLife;
-  let logsToAdd = [];
-
-  for (let i = 0; i < drawCount; i++) {
-    if (d.length === 0) {
-      const nonManaGrave = g.filter(c => !c.isMana);
-      if (nonManaGrave.length === 0) {
-        break;
-      }
-      life -= 5;
-      d = nonManaGrave.sort(() => Math.random() - 0.5);
-      g = g.filter(c => c.isMana);
-    }
-    if (d.length > 0) {
-      const drawnCard = d.shift();
-      if (h.length < 10) {
-        h.push(drawnCard);
-      } else {
-        if (!drawnCard.isMana) g.push(drawnCard);
-      }
-    }
-  }
-  return { d, h, g, life };
-};
-
-const TARGETED_EFFECTS = ["damage_single_enemy", "destroy_single_enemy", "buff_single_ally"];
+import { useBattle } from '../hooks/useBattle';
 
 function BattleScreen({ playerDeckData, enemyDeckData, onBack }) {
-
+  // 🌟 UI（ポップアップやモーダル）のStateだけを画面側に残す
+  const [viewingGrave, setViewingGrave] = useState(null);
+  const [popup, setPopup] = useState({ id: 0, msg: "" });
+  const [detailCard, setDetailCard] = useState(null);
 
   const triggerPopup = (msg) => setPopup({ id: Date.now(), msg });
 
+  // 🌟 useBattle から「すべてのデータと関数」を受け取る！
+  // 渡す引数として、popupを表示するための triggerPopup や初期デッキデータを渡します
+  const {
+    playerMaxLife, enemyMaxLife, playerLife, enemyLife,
+    playerDeck, playerHand, playerField,
+    enemyDeck, enemyHand, enemyField,
+    playerGrave, enemyGrave,
+    isPlayerTurn, gameState, selectedAttackerIdx, pendingTarget,
+    playCard, endPlayerTurn, handleSelectAttacker, handleFightMinion, handleDirectAttack
+  } = useBattle({ playerDeckData, enemyDeckData, triggerPopup, gameState, onBack }); // ← ※引数の連携は下記フック側を参照
 
-  // src/components/BattleScreen.jsx 内の executeSkill 関数の修正
-
-
-  useEffect(() => {
-    const pDeck = JSON.parse(JSON.stringify(playerDeckData || []));
-    const eDeck = JSON.parse(JSON.stringify(enemyDeckData || []));
-    pDeck.sort(() => Math.random() - 0.5);
-    eDeck.sort(() => Math.random() - 0.5);
-
-    const pHand = [];
-    for (let i = 0; i < 4; i++) if (pDeck.length > 0) pHand.push(pDeck.shift());
-    pHand.push(JSON.parse(JSON.stringify(MANA_CARD)));
-
-    const eHand = [];
-    for (let i = 0; i < 3; i++) if (eDeck.length > 0) eHand.push(eDeck.shift());
-    eHand.push(JSON.parse(JSON.stringify(MANA_CARD)));
-
-    setPlayerMaxLife(20);
-    setEnemyMaxLife(20);
-    setPlayerLife(20);
-    setEnemyLife(20);
-    setPlayerDeck(pDeck);
-    setPlayerHand(pHand);
-    setEnemyDeck(eDeck);
-    setEnemyHand(eHand);
-    setPlayerField([]);
-    setEnemyField([]);
-    setPlayerGrave([]);
-    setEnemyGrave([]);
-    setIsPlayerTurn(true);
-    setGameState('playing');
-    setSelectedAttackerIdx(null);
-    setPendingTarget(null);
-    setViewingGrave(null);
-    setDetailCard(null);
-  }, [playerDeckData, enemyDeckData]);
-
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-    if (enemyLife <= 0) {
-      setGameState('win');
-      triggerPopup("🎊 YOU WIN 🎊");
-    } else if (playerLife <= 0) {
-      setGameState('lose');
-      triggerPopup("💀 YOU LOSE 💀");
-    }
-  }, [playerLife, enemyLife, gameState]);
-  // src/components/BattleScreen.jsx 内の useEffect 群の中に追加します
-
-  // 🌟 新設：手札の「金塊」による特殊勝利チェックシステム
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-
-    // 1. プレイヤー側のチェック
-    const playerGoldCount = playerHand.filter(card => card && card.name === "金塊").length;
-    if (playerGoldCount >= 8) {
-      setGameState('win');
-      triggerPopup("💰 金塊が8枚揃った 特殊勝利 💰");
-    }
-
-    // 2. 相手（敵AI）側のチェック（AIデッキに金塊を入れる場合を想定）
-    const enemyGoldCount = enemyHand.filter(card => card && card.name === "金塊").length;
-    if (enemyGoldCount >= 8) {
-      setGameState('lose');
-      triggerPopup("💀 相手の金塊が8枚揃ってしまった！ 💀");
-    }
-  }, [playerHand, enemyHand, gameState]);
-
-  // 🪦 盤面自動整理システム：どちらかの場のミニオンのHPが0以下になったら自動で墓地に送る
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-
-    // 1. プレイヤー側のフィールドチェック
-    const deadPlayerCards = playerField.filter(c => c && c.hp <= 0 && !c.isMana);
-    if (deadPlayerCards.length > 0) {
-      // 破壊時効果（ラストワード）をトリガー
-      checkAndTriggerDeathrattle(deadPlayerCards, true);
-      // 墓地へ追加
-      setPlayerGrave(prev => [...prev, ...deadPlayerCards]);
-      // 生き残ったミニオンだけを場に残す
-      setPlayerField(prev => prev.filter(c => c.hp > 0));
-    }
-
-    // 2. 敵側のフィールドチェック
-    const deadEnemyCards = enemyField.filter(c => c && c.hp <= 0 && !c.isMana);
-    if (deadEnemyCards.length > 0) {
-      // 破壊時効果（ラストワード）をトリガー
-      checkAndTriggerDeathrattle(deadEnemyCards, false);
-      // 墓地へ追加
-      setEnemyGrave(prev => [...prev, ...deadEnemyCards]);
-      // 生き残ったミニオンだけを場に残す
-      setEnemyField(prev => prev.filter(c => c.hp > 0));
-    }
-  }, [playerField, enemyField, gameState]);
-
+  // ポップアップ用のEffectだけ画面側に残す
   useEffect(() => {
     if (popup.msg) {
       const timer = setTimeout(() => setPopup({ id: 0, msg: "" }), 1200);
@@ -148,12 +30,7 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack }) {
     }
   }, [popup]);
 
-
-
-
-
   return (
-    // 🌟 外枠：画面いっぱいに広がるFlexコンテナ（縦並び）に大改造！
     <div id="game-screen" style={{ position: 'relative', width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', background: '#1e272e', overflow: 'hidden' }}>
 
       <style>{`
