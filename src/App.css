@@ -1,0 +1,626 @@
+/* --- 画面全体の設定 --- */
+body {
+    font-family: sans-serif;
+    background-color: #2c3e50; /* ホーム画面に合わせて全体を暗めの色にする */
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* 画面切り替え用のクラス（これを付けた要素は消える） */
+.hidden {
+    display: none !important;
+}
+
+/* --- PCゲーム風：ホーム画面のスタイル --- */
+#home-screen {
+    height: 100vh;
+    max-width: 800px; /* デッキ画面と同じ幅に合わせて一体感を出す */
+    margin: 0 auto;
+    box-sizing: border-box;
+    padding: 20px;
+    background: linear-gradient(135deg, #111e38 0%, #1a2a6c 50%, #2c3e50 100%);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+}
+
+/* 左上のプレイヤー情報 */
+.pc-player-status {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 8px 15px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.pc-player-status .avatar { font-size: 1.8rem; }
+.pc-player-status .name { font-weight: bold; font-size: 0.9rem; }
+.pc-player-status .lv { font-size: 0.75rem; color: #f1c40f; }
+
+/* 右上の資産情報 */
+.pc-resource-status {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 8px 15px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 0.9rem;
+    font-weight: bold;
+}
+.res-item { margin-left: 15px; }
+.res-item:first-child { margin-left: 0; }
+
+/* 中央のメインメニューエリア */
+.pc-main-menu {
+    text-align: center;
+    margin-top: 40px;
+}
+
+.pc-title {
+    font-size: 3rem;
+    margin: 0 0 5px 0;
+    color: #f1c40f;
+    text-shadow: 0 4px 10px rgba(0,0,0,0.6);
+    letter-spacing: 2px;
+}
+
+.pc-subtitle {
+    font-size: 1rem;
+    margin: 0 0 40px 0;
+    color: #bdc3c7;
+    font-style: italic;
+}
+
+/* 縦並びのメニューボタンたち */
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 280px;
+    margin: 0 auto;
+}
+
+.pc-menu-btn {
+    padding: 12px;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #ecf0f1;
+    background: rgba(52, 73, 94, 0.8);
+    border: 2px solid #34495e;
+    border-radius: 6px;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    transition: all 0.2s ease;
+}
+
+.pc-menu-btn:hover {
+    background: #34495e;
+    border-color: #5d6d7e;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+}
+
+/* バトル出発ボタンだけ特別に目立たせる */
+.btn-battle {
+    background: linear-gradient(135deg, #d35400, #e67e22);
+    border-color: #e67e22;
+    font-size: 1.1rem;
+    padding: 15px;
+}
+.btn-battle:hover {
+    background: linear-gradient(135deg, #e67e22, #f39c12);
+    border-color: #f39c12;
+}
+
+/* デッキ構築ボタンも少しだけ青く強調 */
+.btn-deck {
+    background: rgba(41, 128, 185, 0.8);
+    border-color: #2980b9;
+}
+.btn-deck:hover {
+    background: #2980b9;
+    border-color: #3498db;
+}
+/* --- ゲーム画面（元々のbodyの設定をここに移動） --- */
+#game-screen {
+    background-color: #f0f0f0;
+    margin: 0 auto;
+    max-width: 600px;
+    padding: 10px;
+    height: 100vh;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+h1 { font-size: 1.2rem; margin: 0 0 10px 0; text-align: center; }
+h2 { font-size: 0.9rem; margin: 5px 0; text-align: center; color: #333; }
+
+/* 相手エリアのスタイル */
+#enemy-area {
+    padding: 5px 10px;
+    background-color: #fce4d6;
+    border: 2px solid #cc7a00;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+    text-align: center;
+}
+
+.life-display {
+    font-size: 1rem;
+    font-weight: bold;
+    color: #d9534f;
+    margin-bottom: 5px;
+}
+
+/* 手札とフィールドの箱をコンパクトに */
+#hand-container, #field-container, #enemy-hand-container, #enemy-field-container {
+    display: flex;
+    gap: 5px;
+    min-height: 95px; /* 高さを小さく */
+    padding: 5px;
+    border: 2px dashed #999;
+    border-radius: 8px;
+    justify-content: center;
+}
+
+#field-container { background-color: #e2f0d9; margin-bottom: 5px; }
+#hand-container { margin-bottom: 5px; }
+#enemy-hand-container { min-height: 50px; border: none; padding: 0; margin-bottom: 5px;}
+#enemy-field-container { background-color: #fce4d6; border-color: #cc7a00; }
+
+/* ==========================================
+   新設・変更：ドット絵イラスト対応カードデザイン
+   ========================================== */
+.card {
+    width: 75px;        /* 縦横比を調整して少し大きく */
+    height: 115px;
+    background-color: #f7f9fa;
+    border: 2px solid #2c3e50;
+    border-radius: 6px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 2px 4px 8px rgba(0,0,0,0.3);
+    box-sizing: border-box;
+    overflow: hidden;   /* 画像が枠からはみ出さないようにする */
+    position: relative;
+}
+
+/* ★超重要：ドット絵をクッキリ表示する設定 */
+.card-img {
+    width: 100%;
+    height: 45px;       /* 上の約4割をイラストエリアにする */
+    background-color: #000; /* 画像がない時の背景色（黒） */
+    object-fit: contain;
+    image-rendering: pixelated; /* ドット絵がボケずにパキッと表示される魔法のプロンプト */
+    border-bottom: 1px solid #2c3e50;
+}
+
+/* カードの下半分（テキストエリア） */
+.card-info-box {
+    padding: 3px;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    justify-content: space-between;
+    background-color: #fff;
+}
+
+/* カードの名前エリア */
+.card-name { 
+    font-weight: bold; 
+    font-size: 0.55rem; /* 0.6remからほんの少しだけ小さく */
+    text-align: center; 
+    color: #333;
+    
+    /* ▼ ここからがはみ出し対策 ▼ */
+    white-space: normal; /* 改行を許可する（nowrapを削除） */
+    line-height: 1.1; /* 2行になった際に行間が開きすぎないよう詰める */
+    letter-spacing: -0.05em; /* 文字の隙間を少し詰めて、なるべく1行に収める工夫 */
+    
+    /* 念のための保険：もし3行以上になる超長い名前が来たら「...」で省略する */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.card-power { 
+    color: #333; 
+    font-size: 0.75rem; 
+    font-weight: bold; 
+    text-align: center;
+    background: #f1f2f6;
+    border-radius: 3px;
+    padding: 1px 0;
+}
+
+.card-effect {
+    font-size: 0.45rem;
+    color: #2980b9;
+    text-align: center;
+    font-weight: bold;
+    line-height: 1.1;
+}
+
+/* ホバーなどのアニメーション */
+#hand-container .card { cursor: pointer; transition: transform 0.1s; }
+#hand-container .card:hover { transform: translateY(-5px); }
+
+#field-container .card { cursor: pointer; transition: transform 0.2s, background-color 0.2s; }
+#field-container .card:not(.attacked):hover {
+    transform: translateY(-5px);
+    box-shadow: 0 0 10px rgba(241, 196, 15, 0.6);
+    border-color: #f1c40f;
+}
+
+/* 攻撃済み・行動不可カード */
+.card.attacked {
+    transform: translateY(5px);
+    opacity: 0.6;
+    cursor: default;
+    box-shadow: none;
+}
+.card.unplayable {
+    opacity: 0.4;
+    cursor: not-allowed !important;
+    pointer-events: none;
+}
+
+/* 敵のカード */
+.card.enemy-card { 
+    border-color: #c0392b; 
+}
+.card.enemy-card .card-info-box { background-color: #fff5f5; }
+.card.enemy-card:hover { transform: none; box-shadow: none; }
+
+/* 裏側のカード（相手の手札） */
+.card.card-back {
+    background-color: #2c3e50;
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px);
+    border: 2px solid #1a252f;
+    cursor: default;
+    height: 60px; /* 手札部分はコンパクトに */
+    width: 40px;
+}
+
+/* ターン終了ボタン */
+#end-button {
+    padding: 8px 30px;
+    font-weight: bold;
+    cursor: pointer;
+    align-self: center;
+    margin-top: auto;
+    margin-bottom: 10px;
+}
+
+/* 選択中の自分のカードを光らせる */
+.card.selected {
+    border-color: #f1c40f;
+    box-shadow: 0 0 15px rgba(241, 196, 15, 0.8);
+    transform: translateY(-8px) scale(1.05);
+    z-index: 10;
+}
+
+/* 攻撃対象（相手エリアや相手のカード）に乗せた時のカーソル */
+#enemy-area { cursor: crosshair; }
+#enemy-field-container .card { cursor: crosshair; }
+
+/* ステータス表記を少し小さくして1行に収める */
+.card-power { color: #333; font-size: 0.8rem; font-weight: bold; }
+
+/* --- 破壊された時のアニメーション --- */
+.card.dead {
+    transform: scale(0.5) !important; /* カードを半分に縮小 */
+    opacity: 0;                       /* 透明にする */
+    pointer-events: none;             /* クリック判定を消す */
+    transition: transform 0.3s, opacity 0.3s;
+}
+
+/* --- 新設：メッセージ通知（トースト） --- */
+#toast-message {
+    position: fixed;
+    top: 40%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 15px 40px;
+    font-size: 1.5rem;
+    font-weight: bold;
+    border-radius: 8px;
+    z-index: 50;
+    pointer-events: none; /* クリックの邪魔にならないようにする */
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+}
+
+/* --- 新設：結果表示モーダル --- */
+#result-modal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.7); /* 後ろを半透明の黒にする */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+}
+
+.modal-content {
+    background-color: white;
+    padding: 40px 30px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    width: 80%;
+    max-width: 350px;
+}
+
+#result-title { font-size: 2.5rem; margin-bottom: 10px; }
+.win-title { color: #f1c40f; }
+.lose-title { color: #34495e; }
+
+#modal-home-button {
+    margin-top: 20px;
+    padding: 12px 24px;
+    font-size: 1.1rem;
+    font-weight: bold;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+#modal-home-button:hover { background-color: #2980b9; }
+
+/* --- 新設：使用権がない・出せないカード --- */
+.card.unplayable {
+    opacity: 0.5;                /* 半透明にして暗くする */
+    cursor: not-allowed !important; /* カーソルを禁止マークにする */
+    pointer-events: none;        /* クリック自体を無効化する */
+}
+
+/* --- 新設：デッキ構築画面のスタイル --- */
+#deck-build-screen {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    box-sizing: border-box;
+    background-color: #2c3e50; /* ホームと同じ暗めの背景 */
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+.deck-build-container {
+    display: flex;
+    gap: 10px;
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+.half-area {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+}
+
+.card-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    overflow-y: auto;
+    align-content: flex-start;
+}
+
+#finish-deck-button {
+    margin-top: 10px;
+    padding: 15px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    transition: background-color 0.2s;
+}
+
+#finish-deck-button:disabled {
+    background-color: #7f8c8d;
+    cursor: not-allowed;
+}
+
+#finish-deck-button:not(:disabled):hover {
+    background-color: #2ecc71;
+}
+
+/* --- 新設：デッキクラウド保存ボタンのスタイル --- */
+#save-deck-btn {
+    margin-top: 10px;
+    padding: 15px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    background: linear-gradient(135deg, #d35400, #e67e22); /* ホーム画面のバトル出発ボタンと色味を統一 */
+    color: white;
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    transition: all 0.2s ease;
+}
+
+#save-deck-btn:hover {
+    background: linear-gradient(135deg, #e67e22, #f39c12);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+}
+
+#save-deck-btn:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+/* ボタンを横並びにする場合のコンテナ（もし決定ボタンと横並びにするなら） */
+.deck-build-footer {
+    display: flex;
+    gap: 10px;
+}
+.deck-build-footer button {
+    flex: 1;
+}
+
+/* 1. カードを出した時の「飛び出し」アニメーション */
+.effect-play {
+    animation: play-anim 0.5s ease-out;
+}
+@keyframes play-anim {
+    0% { transform: scale(0.5) translateY(50px); opacity: 0; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* 2. 攻撃した時の「衝撃」アニメーション */
+.effect-attack {
+    animation: attack-anim 0.3s ease-in-out;
+}
+@keyframes attack-anim {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-15px); }
+    75% { transform: translateX(15px); }
+    100% { transform: translateX(0); }
+}
+
+/* ドラッグされている最中のカードの見た目 */
+.card.dragging {
+    opacity: 0.4;
+    border-style: dashed;
+}
+
+/* カードを重ねた時に、置き場所（フィールド）を光らせる */
+#field-container.drag-over {
+    background-color: #cce5ff !important; /* 少し青みがかった色に */
+    border: 2px dashed #004085;
+    box-shadow: inset 0 0 15px rgba(0, 64, 133, 0.3);
+}
+
+/* --- カード詳細モーダル --- */
+#card-detail-modal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(0, 0, 0, 0.85); /* 背景を少し暗く */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 200; /* 一番手前に表示 */
+}
+
+.detail-box {
+    background: #f7f9fa;
+    border: 4px solid #2c3e50;
+    border-radius: 12px;
+    padding: 20px;
+    width: 260px;
+    text-align: center;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.8);
+}
+
+#detail-img {
+    width: 100%;
+    height: 120px;
+    object-fit: contain;
+    image-rendering: pixelated; /* ドット絵をクッキリ拡大 */
+    background: #000;
+    border-radius: 6px;
+    border-bottom: 2px solid #2c3e50;
+    margin-bottom: 10px;
+}
+
+#detail-name {
+    font-size: 1.5rem;
+    color: #333;
+    margin: 0 0 10px 0;
+    font-weight: bold;
+}
+
+#detail-stats {
+    font-size: 1.2rem;
+    color: #d35400;
+    margin-bottom: 10px;
+    font-weight: bold;
+    background: #fce4d6;
+    padding: 5px;
+    border-radius: 5px;
+}
+
+#detail-effect {
+    font-size: 1rem;
+    color: #2980b9;
+    margin-bottom: 20px;
+    font-weight: bold;
+    line-height: 1.4;
+}
+
+.detail-btn-group { display: flex; gap: 10px; justify-content: center; }
+.detail-btn { padding: 10px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; flex: 1; transition: 0.2s; }
+.btn-close { background: #7f8c8d; color: white; }
+.btn-close:hover { background: #95a5a6; }
+
+/* ==========================================
+   React版 バトル画面専用デザイン（ダークテーマ）
+========================================== */
+#game-screen {
+    background-color: #1e272e; /* 背景をダークグレーに */
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+    color: white; /* 基本の文字色を白に */
+}
+
+#enemy-area {
+    background-color: rgba(231, 76, 60, 0.15); /* 敵陣はほんのり赤く */
+    padding: 15px;
+    border-radius: 10px;
+    border: 2px solid #c0392b;
+}
+
+#player-area {
+    background-color: rgba(46, 204, 113, 0.15); /* 自陣はほんのり緑に */
+    padding: 15px;
+    border-radius: 10px;
+    border: 2px solid #27ae60;
+    margin-top: 20px;
+}
+
+/* ついでにドラッグして乗せた時の光るエフェクト */
+#player-field-area.drag-over {
+    background-color: rgba(41, 128, 185, 0.3) !important;
+    border-color: #3498db !important;
+    box-shadow: 0 0 15px #3498db;
+}
+
+/* 勝敗画面がふわっと出るアニメーション */
+@keyframes fadeInResult {
+  from {
+    opacity: 0;
+    transform: scale(1.1); /* 少し大きくしてから */
+  }
+  to {
+    opacity: 1;
+    transform: scale(1); /* 元のサイズに戻す */
+  }
+}
