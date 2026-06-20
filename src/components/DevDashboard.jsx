@@ -1,7 +1,7 @@
 // src/components/DevDashboard.jsx
 import { useState } from 'react';
 import { collection, doc, writeBatch } from 'firebase/firestore';
-import { db } from '../firebase'; 
+import { db } from '../firebase';
 
 function DevDashboard({ onBack }) {
   const [name, setName] = useState('');
@@ -62,31 +62,31 @@ function DevDashboard({ onBack }) {
 
   // 表示用に一部の効果タイプ名に注釈を入れました
   const requiresTargetCardName = [
-    "search_card_to_hand", 
-    "recruit_card_to_field", 
-    "generate_card_to_hand", 
+    "search_card_to_hand",
+    "recruit_card_to_field",
+    "generate_card_to_hand",
     "generate_card_to_field"
   ].includes(effectType);
 
   return (
     <div style={{ padding: '20px', paddingBottom: '100px', color: 'white', background: '#2c3e50', height: '100vh', overflowY: 'auto', boxSizing: 'border-box' }}>
-      
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>🛠️ 開発者用 カードジェネレーター</h1>
         <button className="pc-menu-btn" onClick={onBack} style={{ background: '#7f8c8d' }}>戻る</button>
       </div>
 
       <div style={{ display: 'flex', gap: '20px', marginTop: '20px', flexWrap: 'wrap' }}>
-        
+
         {/* 左側：入力フォーム */}
         <div style={{ flex: '1 1 400px', background: '#34495e', padding: '20px', borderRadius: '10px' }}>
           <h3>カードパラメータ入力</h3>
-          
+
           <div style={{ marginBottom: '10px' }}>
             <label>カード名: </label>
             <input type="text" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', padding: '5px' }} />
           </div>
-          
+
           <div style={{ marginBottom: '15px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px' }}>
             <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>カード画像設定: </label>
             <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
@@ -115,7 +115,7 @@ function DevDashboard({ onBack }) {
               <option value="hp">自分の最大HPと現在HPを消費 (hp)</option>
             </select>
           </div>
-          
+
           <div style={{ marginBottom: '10px' }}>
             <label style={{ color: '#f1c40f', fontWeight: 'bold' }}>消費マナコスト (Cost): </label>
             <input type="number" value={cost} onChange={e => setCost(e.target.value)} min="0" style={{ width: '100%', padding: '5px' }} />
@@ -174,15 +174,15 @@ function DevDashboard({ onBack }) {
           {/* 🌟新設：効果対象カード名の入力欄（サーチやトークン系の時だけ活性化・強調されます） */}
           <div style={{ marginBottom: '10px', background: requiresTargetCardName ? 'rgba(241, 196, 15, 0.1)' : 'transparent', padding: '5px', borderRadius: '5px', border: requiresTargetCardName ? '1px dashed #f1c40f' : 'none' }}>
             <label style={{ color: requiresTargetCardName ? '#f1c40f' : 'white', fontWeight: requiresTargetCardName ? 'bold' : 'normal' }}>
-              🎯 効果の対象カード名 (EffectTargetName): 
+              🎯 効果の対象カード名 (EffectTargetName):
             </label>
-            <input 
-              type="text" 
-              value={effectTargetName} 
-              onChange={e => setEffectTargetName(e.target.value)} 
-              disabled={!requiresTargetCardName} 
-              placeholder="例: 勇者 / スライム (サーチ・トークン系効果のみ使用)" 
-              style={{ width: '100%', padding: '5px', marginTop: '3px' }} 
+            <input
+              type="text"
+              value={effectTargetName}
+              onChange={e => setEffectTargetName(e.target.value)}
+              disabled={!requiresTargetCardName}
+              placeholder="例: 勇者 / スライム (サーチ・トークン系効果のみ使用)"
+              style={{ width: '100%', padding: '5px', marginTop: '3px' }}
             />
           </div>
 
@@ -203,7 +203,7 @@ function DevDashboard({ onBack }) {
             <div style={{ background: '#1abc9c', color: 'black', padding: '10px', borderRadius: '5px', maxHeight: '200px', overflowY: 'auto' }}>
               {batchCards.length === 0 ? "まだありません" : batchCards.map((c, i) => (
                 <div key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.2)', paddingBottom: '5px', marginBottom: '5px' }}>
-                  {i+1}. <b>{c.name}</b> ({c.cardType} / コスト:{c.cost})
+                  {i + 1}. <b>{c.name}</b> ({c.cardType} / コスト:{c.cost})
                 </div>
               ))}
             </div>

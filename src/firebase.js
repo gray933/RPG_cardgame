@@ -1,20 +1,16 @@
-// src/firebase.js
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
-// あなたのプロジェクト専用の接続カギ
+// 環境変数から読み込むように変更
 const firebaseConfig = {
-    apiKey: "AIzaSyB959o0_TSxxu118N_QEzzl6fd-5lgKZLQ",
-    authDomain: "cardgame-8b727.firebaseapp.com",
-    projectId: "cardgame-8b727",
-    storageBucket: "cardgame-8b727.firebasestorage.app",
-    messagingSenderId: "485380575649",
-    appId: "1:485380575649:web:8fcb9a426d1fa08e0a7be0",
-    measurementId: "G-ZCKH636292"
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Firebaseを初期化
 const app = initializeApp(firebaseConfig);
-
-// データベース（Firestore）の窓口を作って、他のファイルで使えるようにエクスポートする
 export const db = getFirestore(app);
