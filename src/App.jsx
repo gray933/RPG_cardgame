@@ -114,7 +114,6 @@ function App() {
     return (
       <div style={{ textAlign: 'center', padding: '100px 20px', background: '#1e272e', minHeight: '100vh', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
         <h1 style={{ fontSize: '3.5rem', color: '#f1c40f', textShadow: '0 0 10px rgba(241,196,15,0.3)', marginBottom: '10px' }}>RPG CARD GAME</h1>
-        <p style={{ color: '#bdc3c7', fontSize: '1.2rem', marginBottom: '40px' }}>〜 オンライン対人戦対応ヴァージョン 〜</p>
         <div style={{ background: '#2c3e50', padding: '40px', borderRadius: '12px', border: '2px solid #34495e', maxWidth: '400px', width: '100%' }}>
           <p style={{ marginBottom: '25px', fontSize: '1.1rem' }}>ゲームをプレイするには<br />Googleアカウントでの認証が必要です。</p>
           <button 
@@ -174,7 +173,7 @@ function App() {
           <h1 style={{ color: '#f1c40f', fontSize: '4rem', margin: '0 0 20px 0', letterSpacing: '4px' }}>RPG CARD GAME</h1>
           <p style={{ color: '#7f8c8d', fontSize: '1.2rem', marginBottom: '60px' }}>PRESS THE BUTTON TO START</p>
           <button className="pc-menu-btn" style={{ padding: '20px 60px', fontSize: '1.5rem', background: '#e67e22' }} onClick={() => setCurrentScreen('home')}>
-            🕹️ ゲームを始める
+            ゲームを始める
           </button>
         </div>
       )}

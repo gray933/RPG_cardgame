@@ -56,20 +56,26 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack, isPvP = false, ro
       try {
         const roomRef = doc(db, 'rooms', roomId);
 
-        // 既に決着がついている（statusがfinished）場合は、データベースからルーム自体を削除！
         if (gameState !== 'playing') {
           await deleteDoc(roomRef);
         } else {
-          // まだプレイ中の場合は、自分が降参したということなので、相手を勝者にしてからルームを削除
-          // (※相手が勝った画面を確認できるように、ここでは一旦削除せずfinishedにするだけに留めるか、
-          //  あるいは一思いに消すか選べますが、今回は手動お掃除優先でその場で消しちゃいます！)
-          await deleteDoc(roomRef);
+          // まだプレイ中の場合は、自分が降参したため相手を勝者として更新する（削除はしない）
+          await updateDoc(roomRef, {
+            status: 'finished',
+            winner: enemyRole,
+            reason: 'surrender'
+          });
+          // 降参処理の送信が完了するのを少し待ってから画面を戻す
+          setTimeout(() => {
+            onBack();
+          }, 500);
+          return; // setTimeout内でonBackを呼ぶため、関数をここで終了
         }
       } catch (error) {
         console.error("ルームクリーンアップエラー:", error);
       }
     }
-    onBack(); // メニューに戻る
+    onBack();
   };
 
   // 🌟 (追加) ブラウザのタブ閉じやリロード（強制切断）を検知する
