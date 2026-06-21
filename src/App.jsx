@@ -1,6 +1,6 @@
 // src/App.jsx
 import { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore'; // 🌟 setDocを追加
+import { doc, getDoc, setDoc } from 'firebase/firestore'; 
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth, provider } from './firebase';
 import DeckBuilder from './components/DeckBuilder';
@@ -11,32 +11,31 @@ import './App.css';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null); // 🌟 ニックネームなどのプロファイル情報
-  const [inputNickname, setInputNickname] = useState(''); // 🌟 ニックネーム入力用
+  const [userProfile, setUserProfile] = useState(null); 
+  const [inputNickname, setInputNickname] = useState(''); 
 
   const [currentScreen, setCurrentScreen] = useState('title');
   const [playerDeck, setPlayerDeck] = useState([]);
   const [enemyDeck, setEnemyDeck] = useState([]);
-  const [selectedSlot, setSelectedSlot] = useState(1);
+  const [selectedSlot, setSelectedSlot] = useState(1); // ここは内部の識別IDとしてそのまま1〜5を保持します
   const [selectPurpose, setSelectPurpose] = useState('');
   const [isLoaded, setIsLoaded] = useState(true);
 
   const [pvpRoomId, setPvpRoomId] = useState('');
   const [pvpRole, setPvpRole] = useState('');
 
-  // 🌟 アプリ起動時のログイン状態＆プロフィール監視
+  // ログイン状態＆プロフィール監視
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
-        // Firestoreの "users" コレクションからこのユーザーのデータを取得
         const userDoc = await getDoc(doc(db, 'users', user.uid));
         if (userDoc.exists()) {
-          setUserProfile(userDoc.data()); // 登録済みのデータをセット
+          setUserProfile(userDoc.data());
           setCurrentScreen('title');
         } else {
           setUserProfile(null);
-          setCurrentScreen('set_nickname'); // 初回ログイン時はニックネーム設定へ
+          setCurrentScreen('set_nickname'); 
         }
       } else {
         setCurrentUser(null);
@@ -62,7 +61,6 @@ function App() {
     }
   };
 
-  // 🌟 ニックネームを保存する処理
   const handleSetNickname = async () => {
     if (!inputNickname.trim()) return alert("ニックネームを入力してください！");
     try {
@@ -70,7 +68,6 @@ function App() {
         nickname: inputNickname.trim(),
         createdAt: new Date().toISOString()
       };
-      // Firestoreにユーザー情報を保存
       await setDoc(doc(db, 'users', currentUser.uid), newProfile);
       setUserProfile(newProfile);
       setCurrentScreen('title');
@@ -79,11 +76,14 @@ function App() {
     }
   };
 
+  // アカウント別のデッキを読み込む処理（ドキュメント名も自動的に1〜5に対応します）
   const handleSlotSelect = async (slotNum) => {
     setSelectedSlot(slotNum);
     setIsLoaded(false);
     try {
-      const playerDeckDoc = await getDoc(doc(db, "decks", `player_deck_${slotNum}`));
+      const myDeckDocName = `deck_${currentUser.uid}_${slotNum}`;
+      const playerDeckDoc = await getDoc(doc(db, "decks", myDeckDocName));
+      
       const loadedDeck = playerDeckDoc.exists() ? playerDeckDoc.data().cards || [] : [];
       setPlayerDeck(loadedDeck);
 
@@ -109,7 +109,7 @@ function App() {
     }
   };
 
-  // ログインしていない場合
+  // ログインしていない場合の画面
   if (!currentUser) {
     return (
       <div style={{ textAlign: 'center', padding: '100px 20px', background: '#1e272e', minHeight: '100vh', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
@@ -129,7 +129,7 @@ function App() {
     );
   }
 
-  // 🌟 ログインしているが、ニックネームが未設定の場合
+  // ニックネーム未設定の場合の画面
   if (currentUser && !userProfile) {
     return (
       <div style={{ textAlign: 'center', padding: '100px 20px', background: '#1e272e', minHeight: '100vh', color: 'white' }}>
@@ -160,7 +160,6 @@ function App() {
     <div className="app-container" style={{ width: '100%', minHeight: '100vh', background: '#1e272e', position: 'relative' }}>
       
       <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', alignItems: 'center', gap: '15px', zIndex: 90, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', border: '1px solid #485460' }}>
-        {/* 🌟 本名ではなくニックネームを表示！ */}
         <span style={{ color: '#d2dae2', fontSize: '0.9rem' }}>👤 {userProfile.nickname}</span>
         <button 
           onClick={handleLogout} 
@@ -192,27 +191,39 @@ function App() {
         </div>
       )}
 
+      {/* 🌟 【修正箇所】セーブスロットから「デッキ選択」に変え、5個までループするように変更 */}
       {currentScreen === 'deck_select' && (
         <div style={{ textAlign: 'center', padding: '80px 20px', color: 'white' }}>
-          <h2>使用するセーブスロットを選択</h2>
-          {!isLoaded && <h3 style={{ color: '#f1c40f' }}>📥 データをロード中...</h3>}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', margin: '40px 0' }}>
-            {[1, 2, 3].map(num => (
-              <button key={num} className="pc-menu-btn" style={{ width: '120px', padding: '30px 0', background: '#34495e', fontSize: '1.2rem' }} onClick={() => handleSlotSelect(num)}>💾 スロット {num}</button>
+          <h2>使用するデッキを選択してください</h2>
+          {!isLoaded && <h3 style={{ color: '#f1c40f' }}>📥 デッキデータをロード中...</h3>}
+          <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '20px', margin: '40px auto', maxWidth: '800px' }}>
+            {[1, 2, 3, 4, 5].map(num => (
+              <button 
+                key={num} 
+                className="pc-menu-btn" 
+                style={{ width: '130px', padding: '25px 0', background: '#34495e', fontSize: '1.2rem', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }} 
+                onClick={() => handleSlotSelect(num)}
+              >
+                🃏 デッキ {num}
+              </button>
             ))}
           </div>
-          <button className="pc-menu-btn" style={{ background: '#7f8c8d' }} onClick={() => setCurrentScreen('home')}>戻る</button>
+          <button className="pc-menu-btn" style={{ background: '#7f8c8d', marginTop: '20px' }} onClick={() => setCurrentScreen('home')}>戻る</button>
         </div>
       )}
 
       {currentScreen === 'deck' && (
-        <DeckBuilder slotId={selectedSlot} onBack={() => setCurrentScreen('home')} />
+        <DeckBuilder 
+          slotId={selectedSlot} 
+          userId={currentUser.uid} 
+          onBack={() => setCurrentScreen('home')} 
+        />
       )}
 
       {currentScreen === 'matching' && (
         <MatchingScreen 
           myDeck={playerDeck}
-          playerName={userProfile.nickname} // 🌟 取得したニックネームを渡す！
+          playerName={userProfile.nickname} 
           onBack={() => setCurrentScreen('home')}
           onBattleStart={(roomId, role) => {
             setPvpRoomId(roomId);

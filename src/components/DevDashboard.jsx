@@ -1,223 +1,256 @@
 // src/components/DevDashboard.jsx
-import { useState } from 'react';
-import { collection, doc, writeBatch } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { collection, setDoc, doc, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
+const requiresTargetCardName = ["search_card_to_hand", "recruit_card_to_field", "generate_card_to_hand", "discard_specific"];
+
 function DevDashboard({ onBack }) {
-  const [name, setName] = useState('');
-  const [image, setImage] = useState('img/default.png');
-  const [cardType, setCardType] = useState('character');
-  const [costType, setCostType] = useState('mana');
+  const [activeTab, setActiveTab] = useState('register');
+
+  const [cardName, setCardName] = useState("");
+  const [cardType, setCardType] = useState("character");
   const [cost, setCost] = useState(1);
+  const [costType, setCostType] = useState("mana");
   const [power, setPower] = useState(0);
   const [hp, setHp] = useState(0);
-  const [trigger, setTrigger] = useState('play');
-  const [effectType, setEffectType] = useState('none');
+  const [trigger, setTrigger] = useState("none"); 
+  const [effectType, setEffectType] = useState("none");
   const [effectValue, setEffectValue] = useState(0);
-  const [effectTargetName, setEffectTargetName] = useState(''); // 🌟新設：システム用の対象カード名
-  const [effectText, setEffectText] = useState('');
-  const [batchCards, setBatchCards] = useState([]);
+  const [effectTargetName, setEffectTargetName] = useState("");
+  const [imagePath, setImagePath] = useState("img/Slime.png");
+  const [effectText, setEffectText] = useState("");
 
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const autoPath = `img/${file.name}`;
-    setImage(autoPath);
-    alert(`📸 画像パスを自動設定しました: ${autoPath}`);
-  };
+  const [cardList, setCardList] = useState([]);
 
-  const handleAddCard = () => {
-    if (!name) return alert("カード名を入力してください！");
-    const newCard = { name, image, cardType, costType: "mana", cost: Number(cost), effectText };
-    if (cardType === 'character') {
-      newCard.power = Number(power);
-      newCard.hp = Number(hp);
-    }
-    if (effectType !== 'none') {
-      newCard.trigger = trigger;
-      newCard.effectType = effectType;
-      newCard.effectValue = Number(effectValue);
-      newCard.effectTargetName = effectTargetName.trim(); // 🌟DBに保存
-    }
-    setBatchCards([...batchCards, newCard]);
-    alert(`[${name}] をバッチリストに追加しました！`);
-  };
-
-  const handleBulkRegister = async () => {
-    if (batchCards.length === 0) return alert("登録するカードがありません！");
+  const fetchCards = async () => {
     try {
-      const batch = writeBatch(db);
-      batchCards.forEach((card) => {
-        const newCardRef = doc(collection(db, "cards"));
-        batch.set(newCardRef, card);
-      });
-      await batch.commit();
-      alert(`🎉 成功！ ${batchCards.length} 枚のカードをDBに一括登録しました！`);
-      setBatchCards([]);
+      const snapshot = await getDocs(collection(db, "cards"));
+      const cards = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      cards.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+      setCardList(cards);
     } catch (error) {
-      console.error("一括登録エラー:", error);
-      alert("⚠️ 登録に失敗しました...");
+      console.error("カード一覧の取得に失敗:", error);
     }
   };
 
-  // 表示用に一部の効果タイプ名に注釈を入れました
-  const requiresTargetCardName = [
-    "search_card_to_hand",
-    "recruit_card_to_field",
-    "generate_card_to_hand",
-    "generate_card_to_field",
-    "discard_specific"
-  ].includes(effectType);
+  useEffect(() => {
+    fetchCards();
+  }, []);
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    if (!cardName.trim()) return alert("カード名を入力してください");
+
+    const cardId = cardName.trim();
+    const cardData = {
+      name: cardName.trim(),
+      cardType,
+      cost: Number(cost),
+      costType,
+      power: cardType === 'character' ? Number(power) : 0,
+      hp: cardType === 'character' ? Number(hp) : 0,
+      trigger,
+      effectType,
+      effectValue: Number(effectValue),
+      effectTargetName: requiresTargetCardName.includes(effectType) ? effectTargetName.trim() : "",
+      image: imagePath.trim(),
+      effectText: effectText.trim(),
+      isMana: cardType === 'mana'
+    };
+
+    try {
+      await setDoc(doc(db, "cards", cardId), cardData);
+      alert(`🎉 カード「${cardName}」の登録・更新に成功しました！`);
+      setCardName("");
+      setEffectText("");
+      setEffectTargetName("");
+      fetchCards();
+    } catch (error) {
+      console.error("登録エラー:", error);
+      alert("登録に失敗しました");
+    }
+  };
+
+  const handleDeleteCard = async (cardId, name) => {
+    if (!window.confirm(`本当に「${name}」をマスターデータから削除しますか？`)) return;
+    try {
+      await deleteDoc(doc(db, "cards", cardId));
+      setCardList(cardList.filter(c => c.id !== cardId));
+      alert(`🗑️ 「${name}」を削除しました！`);
+    } catch (error) {
+      console.error("削除エラー:", error);
+      alert("削除に失敗しました。");
+    }
+  };
 
   return (
-    <div style={{ padding: '20px', paddingBottom: '100px', color: 'white', background: '#2c3e50', height: '100vh', overflowY: 'auto', boxSizing: 'border-box' }}>
+    <div style={{ height: '100vh', overflowY: 'auto', padding: '30px', color: 'white', maxWidth: '800px', margin: '0 auto' }}>
+      <h2 style={{ color: '#f1c40f', marginBottom: '25px', borderBottom: '3px solid #f1c40f', display: 'inline-block', paddingBottom: '5px' }}>
+        ⚙️ 開発者ダッシュボード
+      </h2>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>🛠️ 開発者用 カードジェネレーター</h1>
-        <button className="pc-menu-btn" onClick={onBack} style={{ background: '#7f8c8d' }}>戻る</button>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '2px solid #34495e', paddingBottom: '10px' }}>
+        <button onClick={() => setActiveTab('register')} style={{ padding: '12px 24px', background: activeTab === 'register' ? '#2ecc71' : '#2c3e50', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+          ➕ カードを新規登録
+        </button>
+        <button onClick={() => { setActiveTab('list'); fetchCards(); }} style={{ padding: '12px 24px', background: activeTab === 'list' ? '#3498db' : '#2c3e50', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+          📋 登録済み一覧 ({cardList.length}枚)
+        </button>
       </div>
 
-      <div style={{ display: 'flex', gap: '20px', marginTop: '20px', flexWrap: 'wrap' }}>
-
-        {/* 左側：入力フォーム */}
-        <div style={{ flex: '1 1 400px', background: '#34495e', padding: '20px', borderRadius: '10px' }}>
-          <h3>カードパラメータ入力</h3>
-
-          <div style={{ marginBottom: '10px' }}>
-            <label>カード名: </label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', padding: '5px' }} />
+      {activeTab === 'register' && (
+        <form onSubmit={handleRegister} style={{ background: '#2c3e50', padding: '25px', borderRadius: '8px', border: '2px solid #34495e', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', textAlign: 'left' }}>
+          
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>カード名（重複時は上書き）</label>
+            <input type="text" value={cardName} onChange={(e) => setCardName(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white', boxSizing: 'border-box' }} />
           </div>
 
-          <div style={{ marginBottom: '15px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '5px' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>カード画像設定: </label>
-            <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-              <input type="file" id="file-input" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
-              <button type="button" onClick={() => document.getElementById('file-input').click()} style={{ background: '#3498db', color: 'white', padding: '10px 15px', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-                📁 パソコンからファイルを選択
-              </button>
-              <div style={{ fontSize: '0.85rem', color: '#bdc3c7' }}>現在のパス: <code style={{ color: '#f1c40f' }}>{image}</code></div>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '10px' }}>
-            <label>カードタイプ: </label>
-            <select value={cardType} onChange={e => setCardType(e.target.value)} style={{ width: '100%', padding: '5px' }}>
-              <option value="character">キャラクター (Character)</option>
-              <option value="magic">魔法 (Magic)</option>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>カードの種類</label>
+            <select value={cardType} onChange={(e) => setCardType(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white' }}>
+              <option value="character">character (ミニオン)</option>
+              <option value="magic">magic (魔法・使い切り)</option>
+              <option value="mana">mana (マナ結晶システム)</option>
             </select>
           </div>
 
-          <hr style={{ borderColor: '#7f8c8d', margin: '20px 0' }} />
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>使用コスト</label>
+            <input type="number" value={cost} onChange={(e) => setCost(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white', boxSizing: 'border-box' }} />
+          </div>
 
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ fontWeight: 'bold' }}>コストの支払い方法: </label>
-            <select value={costType} onChange={e => setCostType(e.target.value)} style={{ width: '100%', padding: '5px', border: '1px solid #f1c40f' }}>
-              <option value="mana">マナ結晶を消費 (mana)</option>
-              <option value="hp">自分の最大HPと現在HPを消費 (hp)</option>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>コストの支払い先</label>
+            <select value={costType} onChange={(e) => setCostType(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white' }}>
+              <option value="mana">💎 マナ結晶を消費</option>
+              <option value="hp">💔 自分のライフを消費</option>
             </select>
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
-            <label style={{ color: '#f1c40f', fontWeight: 'bold' }}>消費マナコスト (Cost): </label>
-            <input type="number" value={cost} onChange={e => setCost(e.target.value)} min="0" style={{ width: '100%', padding: '5px' }} />
-          </div>
+          {cardType === 'character' && (
+            <>
+              <div>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px', color: '#e74c3c' }}>⚔️ 攻撃力 (Power)</label>
+                <input type="number" value={power} onChange={(e) => setPower(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white', boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px', color: '#2ecc71' }}>💖 体力 (HP)</label>
+                <input type="number" value={hp} onChange={(e) => setHp(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white', boxSizing: 'border-box' }} />
+              </div>
+            </>
+          )}
 
-          <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-            <div style={{ flex: 1 }}>
-              <label>攻撃力 (Power): </label>
-              <input type="number" value={power} onChange={e => setPower(e.target.value)} disabled={cardType !== 'character'} style={{ width: '100%', padding: '5px' }} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label>体力 (HP): </label>
-              <input type="number" value={hp} onChange={e => setHp(e.target.value)} disabled={cardType !== 'character'} style={{ width: '100%', padding: '5px' }} />
-            </div>
-          </div>
-
-          <hr style={{ borderColor: '#7f8c8d', margin: '20px 0' }} />
-
-          <div style={{ marginBottom: '10px' }}>
-            <label>効果の発動タイミング (Trigger): </label>
-            <select value={trigger} onChange={e => setTrigger(e.target.value)} style={{ width: '100%', padding: '5px' }}>
-              <option value="play">場に出した時・使った時 (play)</option>
-              <option value="attack">攻撃した時 (attack)</option>
-              <option value="turn_start">自分のターン開始時 / パッシブ (turn_start)</option>
-              <option value="death">破壊された時 (death)</option>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>発動タイミング (Trigger) 🌟復活!</label>
+            <select value={trigger} onChange={(e) => setTrigger(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white' }}>
+              <option value="none">なし（バニラ）</option>
+              <option value="play">play (召喚時 / 魔法発動時)</option>
+              <option value="death">death (破壊時・断末魔)</option>
+              <option value="attack">attack (攻撃時)</option>
+              <option value="turn_start">turn_start (自分のターン開始時)</option>
+              <option value="turn_end">turn_end (自分のターン終了時)</option>
+              <option value="passive">passive (永続・パッシブ)</option>
             </select>
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
-            <label>DB制御用 効果タイプ (EffectType): </label>
-            <select value={effectType} onChange={e => setEffectType(e.target.value)} style={{ width: '100%', padding: '5px' }}>
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>特殊効果 (Effect Type) 🌟復活!</label>
+            <select value={effectType} onChange={(e) => setEffectType(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white' }}>
               <option value="none">効果なし</option>
-              <option value="gain_mana">マナを増やす (gain_mana)</option>
-              <option value="heal_player">プレイヤーを回復 (heal_player)</option>
-              <option value="draw_card">カードを引く (draw_card)</option>
-              <option value="increase_max_hp">最大HPを増やす (increase_max_hp)</option>
-              <option value="damage_enemy_player">相手プレイヤーにダメージ (damage_enemy_player)</option>
-              <option value="damage_all_enemies">敵モンスター全体にダメージ (damage_all_enemies)</option>
-              <option value="buff_all_allies">味方全体を強化 (buff_all_allies)</option>
-              <option value="damage_single_enemy">敵1体にダメージ (damage_single_enemy)</option>
-              <option value="destroy_single_enemy">敵1体を破壊 (destroy_single_enemy)</option>
-              <option value="buff_single_ally">味方1体を強化 (buff_single_ally)</option>
-              <option value="search_card_to_hand">サーチ：特定のカードをデッキから手札に加える</option>
-              <option value="recruit_card_to_field">リクルート：特定のカードをデッキから場に出す</option>
-              <option value="generate_card_to_hand">トークン：デッキ外からカードを生成して手札に加える</option>
-              <option value="generate_card_to_field">トークン：デッキ外からカードを生成して場に出す</option>
-              <option value="discard_all_hand">手札をすべて捨てる (discard_all_hand)</option>
-              <option value="discard_random">ランダムに手札を捨てる (discard_random)</option>
-              <option value="discard_specific">特定のカードを捨てる (discard_specific)</option>
-              <option value="discard_peeping">覗き見：ランダムに手札を捨てる (discard_peeping)</option>
+              <option value="damage_single_enemy">damage_single_enemy (敵1体にダメージ/要対象)</option>
+              <option value="destroy_single_enemy">destroy_single_enemy (敵1体を破壊/要対象)</option>
+              <option value="buff_single_ally">buff_single_ally (味方1体を強化/要対象)</option>
+              <option value="gain_mana">gain_mana (マナ結晶を手札に生成)</option>
+              <option value="heal_player">heal_player (自分のライフ回復)</option>
+              <option value="damage_enemy_player">damage_enemy_player (相手ライフへ直撃)</option>
+              <option value="damage_all_enemies">damage_all_enemies (敵全体へ全体火力)</option>
+              <option value="buff_all_allies">buff_all_allies (味方全員のステータス強化)</option>
+              <option value="increase_max_hp">increase_max_hp (最大HPと現在HPを同時増加)</option>
+              <option value="draw_card">draw_card (山札からドローする)</option>
+              <option value="search_card_to_hand">search_card_to_hand (特定のカードをデッキから手札へ)</option>
+              <option value="recruit_card_to_field">recruit_card_to_field (特定のカードをデッキから直接召喚)</option>
+              <option value="generate_card_to_hand">generate_card_to_hand (特定のカードを新規生成して手札へ)</option>
+              <option value="discard_all_hand">discard_all_hand (手札を全廃棄)</option>
+              <option value="discard_random">discard_random (相手の手札をランダムハンデス)</option>
+              <option value="discard_specific">discard_specific (指定した名前のカードを手札から捨てる)</option>
             </select>
           </div>
 
-          <div style={{ marginBottom: '10px' }}>
-            <label>効果量 (EffectValue): </label>
-            <input type="number" value={effectValue} onChange={e => setEffectValue(e.target.value)} disabled={effectType === 'none'} style={{ width: '100%', padding: '5px' }} />
+          <div>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>効果の数値 (Effect Value)</label>
+            <input type="number" value={effectValue} onChange={(e) => setEffectValue(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white', boxSizing: 'border-box' }} />
           </div>
 
-          {/* 🌟新設：効果対象カード名の入力欄（サーチやトークン系の時だけ活性化・強調されます） */}
-          <div style={{ marginBottom: '10px', background: requiresTargetCardName ? 'rgba(241, 196, 15, 0.1)' : 'transparent', padding: '5px', borderRadius: '5px', border: requiresTargetCardName ? '1px dashed #f1c40f' : 'none' }}>
-            <label style={{ color: requiresTargetCardName ? '#f1c40f' : 'white', fontWeight: requiresTargetCardName ? 'bold' : 'normal' }}>
-              🎯 効果の対象カード名 (EffectTargetName):
-            </label>
-            <input
-              type="text"
-              value={effectTargetName}
-              onChange={e => setEffectTargetName(e.target.value)}
-              disabled={!requiresTargetCardName}
-              placeholder="例: 勇者 / スライム (サーチ・トークン系効果のみ使用)"
-              style={{ width: '100%', padding: '5px', marginTop: '3px' }}
-            />
-          </div>
-
-          <div style={{ marginBottom: '10px' }}>
-            <label>テキスト（表示用・プレイヤー向け説明文）: </label>
-            <input type="text" value={effectText} onChange={e => setEffectText(e.target.value)} placeholder="例: 召喚時: デッキから「勇者」を1枚手札に加える。" style={{ width: '100%', padding: '5px' }} />
-          </div>
-
-          <button onClick={handleAddCard} style={{ width: '100%', padding: '15px', background: '#2ecc71', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '1.2rem', marginTop: '10px', fontWeight: 'bold' }}>
-            ➕ このカードを送信リストに追加
-          </button>
-        </div>
-
-        {/* 右側：バッチリスト */}
-        <div style={{ flex: '1 1 400px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ background: '#34495e', padding: '20px', borderRadius: '10px' }}>
-            <h3>送信待機リスト ({batchCards.length}枚)</h3>
-            <div style={{ background: '#1abc9c', color: 'black', padding: '10px', borderRadius: '5px', maxHeight: '200px', overflowY: 'auto' }}>
-              {batchCards.length === 0 ? "まだありません" : batchCards.map((c, i) => (
-                <div key={i} style={{ borderBottom: '1px solid rgba(0,0,0,0.2)', paddingBottom: '5px', marginBottom: '5px' }}>
-                  {i + 1}. <b>{c.name}</b> ({c.cardType} / コスト:{c.cost})
-                </div>
-              ))}
+          {requiresTargetCardName.includes(effectType) && (
+            <div style={{ gridColumn: '1 / -1', background: '#e67e22', padding: '10px', borderRadius: '6px' }}>
+              <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px', color: 'black' }}>🎯 対象とする具体的なカード名（完全一致）</label>
+              <input type="text" value={effectTargetName} onChange={(e) => setEffectTargetName(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white', boxSizing: 'border-box' }} placeholder="例: 金塊" />
             </div>
-            <button onClick={handleBulkRegister} disabled={batchCards.length === 0} style={{ width: '100%', padding: '15px', background: batchCards.length > 0 ? '#e74c3c' : '#7f8c8d', color: 'white', border: 'none', borderRadius: '5px', cursor: batchCards.length > 0 ? 'pointer' : 'not-allowed', fontSize: '1.2rem', marginTop: '20px', fontWeight: 'bold' }}>
-              🚀 リストのカードをDBに一括登録！
+          )}
+
+          {/* 🌟 ファイル直接選択機能を復活！ */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>画像ファイルのパス</label>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <input type="text" value={imagePath} onChange={(e) => setImagePath(e.target.value)} style={{ flex: 1, padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white', boxSizing: 'border-box' }} />
+              <label style={{ background: '#3498db', color: 'white', padding: '10px 15px', borderRadius: '4px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                📁 ファイルを選択
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    setImagePath(`img/${e.target.files[0].name}`);
+                  }
+                }} />
+              </label>
+            </div>
+          </div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>カード効果のテキスト説明文</label>
+            <textarea value={effectText} onChange={(e) => setEffectText(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white', boxSizing: 'border-box', height: '60px', resize: 'none' }} />
+          </div>
+
+          <button type="submit" className="pc-menu-btn" style={{ gridColumn: '1 / -1', background: '#2ecc71', padding: '15px', fontSize: '1.2rem', marginTop: '10px' }}>
+            💾 このカードをデータベースに登録
+          </button>
+        </form>
+      )}
+
+      {activeTab === 'list' && (
+        <div style={{ background: '#2c3e50', padding: '25px', borderRadius: '8px', border: '2px solid #34495e', textAlign: 'left' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0, color: '#f1c40f' }}>📋 登録済みマスターカード ({cardList.length}枚)</h3>
+            <button onClick={fetchCards} style={{ padding: '8px 16px', background: '#3498db', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+              ↻ リストを更新
             </button>
-            <button onClick={() => setBatchCards([])} style={{ width: '100%', padding: '5px', marginTop: '10px', background: 'transparent', color: '#e74c3c', border: '1px solid #e74c3c', cursor: 'pointer' }}>リストをクリア</button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '60vh', overflowY: 'auto', paddingRight: '10px' }}>
+            {cardList.length === 0 ? <p style={{ color: '#bdc3c7', textAlign: 'center' }}>カードがありません。</p> : (
+              cardList.map(card => (
+                <div key={card.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a252f', padding: '15px', borderRadius: '6px', borderLeft: card.cardType === 'magic' ? '5px solid #9b59b6' : card.cardType === 'mana' ? '5px solid #3498db' : '5px solid #2ecc71' }}>
+                  <div>
+                    <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#fff' }}>{card.name}</div>
+                    <div style={{ fontSize: '0.85rem', color: '#bdc3c7', marginTop: '6px' }}>
+                      <span style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '3px', marginRight: '8px' }}>{card.cardType.toUpperCase()}</span>
+                      コスト: {card.cost || 0} ({card.costType === 'hp' ? 'HP' : 'マナ'}) 
+                      {card.cardType === 'character' && ` | ⚔️${card.power} / 💖${card.hp}`}
+                    </div>
+                    {card.effectText && <div style={{ fontSize: '0.9rem', color: '#f1c40f', marginTop: '6px', fontStyle: 'italic' }}>効果: {card.effectText}</div>}
+                  </div>
+                  <button onClick={() => handleDeleteCard(card.id, card.name)} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '10px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                    🗑️ 削除
+                  </button>
+                </div>
+              ))
+            )}
           </div>
         </div>
-      </div>
+      )}
+
+      <button className="pc-menu-btn" style={{ background: '#7f8c8d', marginTop: '30px', width: '100%' }} onClick={onBack}>
+        戻る
+      </button>
     </div>
   );
 }
