@@ -1,15 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import Card from './Card';
 import { useBattle } from '../hooks/useBattle';
+import { doc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore'; // 🌟 追加
+import { db } from '../firebase';                    // 🌟 追加
 
-function BattleScreen({ playerDeckData, enemyDeckData, onBack }) {
-  // 🌟 UI（ポップアップやモーダル）のStateだけを画面側に残す
+// 引数に isPvP, roomId, myRole を追加
+function BattleScreen({ playerDeckData, enemyDeckData, onBack, isPvP = false, roomId = '', myRole = 'host' }) {
   const [viewingGrave, setViewingGrave] = useState(null);
   const [popup, setPopup] = useState({ id: 0, msg: "" });
   const [detailCard, setDetailCard] = useState(null);
 
+  // 🌟 PvP用のリアルタイム部屋データStateを追加
+  const [roomData, setRoomData] = useState(null);
+
   const triggerPopup = (msg) => setPopup({ id: Date.now(), msg });
 
+  // 🌟 PvPモードの時だけ、Firestoreのルームを常時監視して同期する
+  useEffect(() => {
+    if (!isPvP || !roomId) return;
+
+    const roomRef = doc(db, 'rooms', roomId);
+    const unsubscribe = onSnapshot(roomRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setRoomData(docSnap.data());
+      }
+    });
+    return () => unsubscribe();
+  }, [isPvP, roomId]);
+
+  // 🌟 useBattleの呼び出し引数を PvP/AI 兼用仕様にアップデート
   const {
     playerMaxLife, enemyMaxLife, playerLife, enemyLife,
     playerDeck, playerHand, playerField,
@@ -18,15 +37,74 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack }) {
     isPlayerTurn, gameState, selectedAttackerIdx, pendingTarget,
     pendingPeeping, resolvePeeping,
     playCard, endPlayerTurn, handleSelectAttacker, handleFightMinion, handleDirectAttack
-  } = useBattle({ playerDeckData, enemyDeckData, triggerPopup, onBack });
+  } = useBattle({
+    roomId,
+    myRole,
+    isPvP,
+    roomData, // 🌟 リアルタイムデータを受け渡す
+    playerDeckData,
+    enemyDeckData,
+    triggerPopup,
+    onBack
+  });
+  // 🌟 (追加) 相手の役割を判定
+  const enemyRole = myRole === 'host' ? 'guest' : 'host';
 
-  // ポップアップ用のEffectだけ画面側に残す
+  // 🌟 既存の handleSurrender（降参ボタン用）や、リザルト画面の「メニューに戻る」の処理を統合する、安全なクリーンアップ関数を作成
+  const cleanUpAndGoBack = async () => {
+    if (isPvP && roomId) {
+      try {
+        const roomRef = doc(db, 'rooms', roomId);
+
+        // 既に決着がついている（statusがfinished）場合は、データベースからルーム自体を削除！
+        if (gameState !== 'playing') {
+          await deleteDoc(roomRef);
+        } else {
+          // まだプレイ中の場合は、自分が降参したということなので、相手を勝者にしてからルームを削除
+          // (※相手が勝った画面を確認できるように、ここでは一旦削除せずfinishedにするだけに留めるか、
+          //  あるいは一思いに消すか選べますが、今回は手動お掃除優先でその場で消しちゃいます！)
+          await deleteDoc(roomRef);
+        }
+      } catch (error) {
+        console.error("ルームクリーンアップエラー:", error);
+      }
+    }
+    onBack(); // メニューに戻る
+  };
+
+  // 🌟 (追加) ブラウザのタブ閉じやリロード（強制切断）を検知する
+  useEffect(() => {
+    if (!isPvP || gameState !== 'playing') return;
+
+    const handleWindowClose = (e) => {
+      // タブが閉じられる瞬間に降参処理を投げる
+      const roomRef = doc(db, 'rooms', roomId);
+      updateDoc(roomRef, {
+        status: 'finished',
+        winner: enemyRole,
+        reason: 'disconnect'
+      });
+      // 一部のブラウザではダイアログを出すために必要
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleWindowClose);
+    return () => {
+      window.removeEventListener('beforeunload', handleWindowClose);
+    };
+  }, [isPvP, gameState, roomId, enemyRole]);
+
   useEffect(() => {
     if (popup.msg) {
       const timer = setTimeout(() => setPopup({ id: 0, msg: "" }), 1200);
       return () => clearTimeout(timer);
     }
   }, [popup]);
+
+  // ローディング待機（PvPでデータが降ってくるまで一瞬待つ）
+  if (isPvP && !roomData) {
+    return <div style={{ color: 'white', textAlign: 'center', marginTop: '100px' }}><h2>⚔️ 対戦空間を同期中...</h2></div>;
+  }
 
   return (
     <div id="game-screen" style={{ position: 'relative', width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', background: '#1e272e', overflow: 'hidden' }}>
@@ -101,9 +179,24 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack }) {
 
       {gameState !== 'playing' && (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(0,0,0,0.9)', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', zIndex: 100 }}>
-          {gameState === 'win' && <h1 style={{ fontSize: '5rem', color: '#f1c40f', textShadow: '0 0 20px #f39c12' }}>YOU WIN!</h1>}
+
+          {gameState === 'win' && (
+            <>
+              <h1 style={{ fontSize: '5rem', color: '#f1c40f', textShadow: '0 0 20px #f39c12', margin: 0 }}>YOU WIN!</h1>
+              {roomData?.reason === 'surrender' && <p style={{ fontSize: '1.5rem', color: '#bdc3c7' }}>相手が降参しました</p>}
+              {roomData?.reason === 'disconnect' && <p style={{ fontSize: '1.5rem', color: '#bdc3c7' }}>相手の通信が切断されました</p>}
+            </>
+          )}
+
           {gameState === 'lose' && <h1 style={{ fontSize: '5rem', color: '#e74c3c', textShadow: '0 0 20px #c0392b' }}>YOU LOSE...</h1>}
-          <button className="pc-menu-btn" style={{ background: '#3498db', fontSize: '1.5rem', padding: '15px 40px', marginTop: '20px' }} onClick={onBack}>メニューに戻る</button>
+
+          <button 
+            className="pc-menu-btn" 
+            style={{ background: '#3498db', fontSize: '1.5rem', padding: '15px 40px', marginTop: '20px' }} 
+            onClick={cleanUpAndGoBack}
+          >
+            メニューに戻る
+          </button>
         </div>
       )}
 
@@ -175,7 +268,11 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack }) {
           <button className="pc-menu-btn" style={{ background: isPlayerTurn ? '#f39c12' : '#7f8c8d', color: 'white', fontSize: '1.2rem', padding: '15px 0', width: '100%', fontWeight: 'bold', border: 'none', borderRadius: '6px', cursor: isPlayerTurn && !pendingTarget ? 'pointer' : 'not-allowed', boxShadow: '0 3px 6px rgba(0,0,0,0.3)' }} onClick={endPlayerTurn} disabled={!isPlayerTurn || pendingTarget}>
             {isPlayerTurn ? "ターン終了" : "相手のターン"}
           </button>
-          <button className="pc-menu-btn" style={{ background: '#c0392b', color: 'white', fontSize: '1rem', padding: '10px 0', width: '100%', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'background 0.2s' }} onClick={onBack}>
+          <button
+            className="pc-menu-btn"
+            style={{ background: '#c0392b', color: 'white', fontSize: '1rem', padding: '10px 0', width: '100%', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'background 0.2s' }}
+            onClick={cleanUpAndGoBack}
+          >
             🏳️ 降参する
           </button>
         </div>
