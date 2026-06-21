@@ -15,6 +15,10 @@ function Card({ cardData, statusText, isEnemy, onDragStart, onDoubleClick }) {
       draggable={!isEnemy && !isMana}
       onDragStart={onDragStart}
       onDoubleClick={onDoubleClick}
+      
+      // 🌟 修正：effect ではなく effectText を使う
+      title={cardData.effectText ? `${cardData.name}\n${cardData.effectText}` : cardData.name}
+      
       style={{
         width: '100px',
         flexShrink: 0,
@@ -34,7 +38,7 @@ function Card({ cardData, statusText, isEnemy, onDragStart, onDoubleClick }) {
         transition: 'transform 0.1s'
       }}
     >
-      {/* 🌟 新設：コストバッジ（左上）マナ結晶以外のカードに表示 */}
+      {/* --- コストバッジなどの既存コードはそのまま --- */}
       {!isMana && (
         <div style={{
           position: 'absolute',
@@ -58,19 +62,16 @@ function Card({ cardData, statusText, isEnemy, onDragStart, onDoubleClick }) {
         </div>
       )}
 
-      {/* ステータステキスト */}
       {statusText && (
         <div style={{ fontSize: '0.65rem', background: 'rgba(0,0,0,0.6)', padding: '1px 4px', borderRadius: '4px', marginBottom: '3px', whiteSpace: 'nowrap' }}>
           {statusText}
         </div>
       )}
 
-      {/* カード名 */}
       <div style={{ fontSize: '0.75rem', fontWeight: 'bold', textAlign: 'center', margin: '2px 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
         {cardData.name}
       </div>
 
-      {/* 画像エリア */}
       <div style={{ width: '100%', flex: 1, background: 'rgba(0,0,0,0.2)', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', margin: '4px 0' }}>
         <img 
           src={`/${cardData.image}`} 
@@ -80,7 +81,6 @@ function Card({ cardData, statusText, isEnemy, onDragStart, onDoubleClick }) {
         />
       </div>
 
-      {/* ステータス（攻撃力 / 体力） */}
       {cardData.cardType === 'character' && (
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '0 2px', fontSize: '0.8rem', fontWeight: 'bold', boxSizing: 'border-box' }}>
           <span style={{ color: '#e74c3c' }}>⚔️{cardData.power}</span>
@@ -90,6 +90,24 @@ function Card({ cardData, statusText, isEnemy, onDragStart, onDoubleClick }) {
 
       {isMagic && (
         <div style={{ fontSize: '0.65rem', color: '#e0aaff', fontWeight: 'bold' }}>🔮 魔法</div>
+      )}
+
+      {/* 🌟 追加：カード効果の表示（カードの一番下） */}
+      {cardData.effectText && (
+        <div style={{ 
+          fontSize: '0.5rem',  /* 文字を小さくして収める */
+          color: '#f1c40f', 
+          textAlign: 'center', 
+          marginTop: '2px', 
+          lineHeight: '1.2',
+          width: '100%',
+          display: '-webkit-box',
+          WebkitLineClamp: 2, /* 2行まで表示して溢れたら「...」にする */
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden'
+        }}>
+          {cardData.effectText}
+        </div>
       )}
     </div>
   );

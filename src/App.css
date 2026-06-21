@@ -624,3 +624,90 @@ h2 { font-size: 0.9rem; margin: 5px 0; text-align: center; color: #333; }
     transform: scale(1); /* 元のサイズに戻す */
   }
 }
+
+/* ==========================================
+   スマホ対応（レスポンシブデザイン）
+   画面幅が768px以下の場合に適用されるスタイル
+========================================== */
+@media (max-width: 768px) {
+    /* --- 1. ホーム画面のスマホ対応 --- */
+    #home-screen {
+        justify-content: flex-start; /* 画面上部から配置 */
+        padding-top: 20px;
+    }
+    
+    /* ステータスバーの重なりを防ぐため、絶対配置をやめて縦に並べる */
+    .pc-player-status, .pc-resource-status {
+        position: static;
+        width: 100%;
+        margin-bottom: 10px;
+        justify-content: center;
+        box-sizing: border-box;
+    }
+
+    .pc-title {
+        font-size: 2.2rem; /* タイトルを少し小さく */
+    }
+
+    /* --- 2. ゲーム（バトル）画面のスマホ対応 --- */
+    #game-screen {
+        padding: 10px 5px; /* 左右の余白を減らして画面を広く使う */
+    }
+
+    /* 手札やフィールドが画面に収まらない場合は横スクロールできるようにする */
+    #hand-container, #field-container, #enemy-hand-container, #enemy-field-container {
+        flex-wrap: nowrap;
+        overflow-x: auto; /* はみ出た部分は横スクロール */
+        justify-content: flex-start; /* スクロールさせるために左寄せ */
+        padding-bottom: 8px; /* スクロールバーがカードに被らないようにする */
+    }
+
+    /* スマホ用にカードサイズを一回り小さくする */
+    .card {
+        width: 60px;
+        height: 90px;
+        flex-shrink: 0; /* カードが潰れないようにする */
+    }
+
+    .card-img {
+        height: 35px; /* イラストエリアを縮小 */
+    }
+
+    /* カード内のテキストサイズも縮小 */
+    .card-name {
+        font-size: 0.45rem;
+    }
+    .card-power {
+        font-size: 0.65rem;
+    }
+    .card-effect {
+        font-size: 0.35rem;
+    }
+
+    /* 裏側のカードサイズも調整 */
+    .card.card-back {
+        width: 35px;
+        height: 50px;
+    }
+
+    /* --- 3. デッキ構築画面のスマホ対応 --- */
+    .deck-build-container {
+        flex-direction: column; /* 左右分割から「上下分割」に変更 */
+    }
+
+    .half-area {
+        flex: none;
+        height: 40vh; /* 上下で画面を半分ずつ使うようにする */
+    }
+
+    /* --- 4. モーダル（ポップアップ）のスマホ対応 --- */
+    .detail-box {
+        width: 90%; /* 画面幅いっぱいに広げる */
+        padding: 15px;
+    }
+
+    .modal-content {
+        width: 90%;
+        padding: 20px 15px;
+    }
+}

@@ -4,7 +4,7 @@ import { collection, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import Card from './Card';
 
-function DeckBuilder({ slotId, userId, onBack }) { 
+function DeckBuilder({ slotId, userId, onBack }) {
   const [allCards, setAllCards] = useState([]);
   const [deckCards, setDeckCards] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,7 +23,7 @@ function DeckBuilder({ slotId, userId, onBack }) {
         if (deckDoc.exists()) {
           setDeckCards(deckDoc.data().cards || []);
         } else {
-          setDeckCards([]); 
+          setDeckCards([]);
         }
       } catch (error) {
         console.error(error);
@@ -81,16 +81,16 @@ function DeckBuilder({ slotId, userId, onBack }) {
             {allCards.map(card => {
               const currentInDeck = deckCards.filter(c => c.name === card.name).length;
               return (
-                <div 
-                  key={card.id} 
-                  onClick={() => addCard(card)} 
-                  style={{ 
-                    cursor: 'pointer', 
-                    opacity: currentInDeck >= 2 ? 0.4 : 1, 
+                <div
+                  key={card.id}
+                  onClick={() => addCard(card)}
+                  style={{
+                    cursor: 'pointer',
+                    opacity: currentInDeck >= 2 ? 0.4 : 1,
                     position: 'relative',
                     // 🌟 枠のサイズ指定はCard.jsx側(100x140)に合わせるか、少し余裕を持たせる
-                    width: '100px',  
-                    height: '140px', 
+                    width: '100px',
+                    height: '140px',
                     flexShrink: 0,
                     display: 'flex',
                     alignItems: 'center',
@@ -102,12 +102,12 @@ function DeckBuilder({ slotId, userId, onBack }) {
 
                   {/* デッキに入っている枚数バッジ */}
                   {currentInDeck > 0 && (
-                    <div style={{ 
-                      position: 'absolute', top: '-5px', right: '-5px', 
-                      background: '#e67e22', color: 'white', borderRadius: '50%', 
-                      width: '24px', height: '24px', display: 'flex', 
-                      justifyContent: 'center', alignItems: 'center', 
-                      fontSize: '0.9rem', fontWeight: 'bold', border: '2px solid white', 
+                    <div style={{
+                      position: 'absolute', top: '-5px', right: '-5px',
+                      background: '#e67e22', color: 'white', borderRadius: '50%',
+                      width: '24px', height: '24px', display: 'flex',
+                      justifyContent: 'center', alignItems: 'center',
+                      fontSize: '0.9rem', fontWeight: 'bold', border: '2px solid white',
                       zIndex: 10
                     }}>
                       {currentInDeck}
@@ -123,14 +123,39 @@ function DeckBuilder({ slotId, userId, onBack }) {
           <h3>📋 現在のデッキ ({deckCards.length} / 20)</h3>
           <div style={{ maxHeight: '65vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px', padding: '5px' }}>
             {deckCards.length === 0 ? (
-              <p style={{ color: '#7f8c8d', textAlign: 'center', marginTop: '20px' }}>カードがありません。<br/>左から選んでください。</p>
+              <p style={{ color: '#7f8c8d', textAlign: 'center', marginTop: '20px' }}>カードがありません。<br />左から選んでください。</p>
             ) : (
               deckCards.map((card, idx) => (
-                <div key={idx} onClick={() => removeCard(idx)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#34495e', padding: '8px 12px', borderRadius: '5px', cursor: 'pointer', borderLeft: card.cardType === 'mana' ? '4px solid #3498db' : card.cardType === 'magic' ? '4px solid #9b59b6' : '4px solid #2ecc71', transition: 'transform 0.1s' }} className="deck-item-row">
-                  <span style={{ fontWeight: 'bold' }}>{card.name}</span>
-                  <span style={{ fontSize: '0.85rem', color: '#bdc3c7', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '3px' }}>
-                    {card.cardType === 'mana' ? 'マナ' : card.cardType === 'magic' ? '魔法' : `${card.power}/${card.hp}`}
-                  </span>
+                <div
+                  key={idx}
+                  onClick={() => removeCard(idx)}
+                  className="deck-item-row"
+                  title="クリックでデッキから外す"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column', // 🌟 要素を縦に並べるために column に変更
+                    background: '#34495e',
+                    padding: '8px 12px',
+                    borderRadius: '5px',
+                    cursor: 'pointer',
+                    borderLeft: card.cardType === 'mana' ? '4px solid #3498db' : card.cardType === 'magic' ? '4px solid #9b59b6' : '4px solid #2ecc71',
+                    transition: 'transform 0.1s'
+                  }}
+                >
+                  {/* カード名とステータスの行 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontWeight: 'bold' }}>{card.name}</span>
+                    <span style={{ fontSize: '0.85rem', color: '#bdc3c7', background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '3px' }}>
+                      {card.cardType === 'mana' ? 'マナ' : card.cardType === 'magic' ? '魔法' : `${card.power}/${card.hp}`}
+                    </span>
+                  </div>
+
+                  {/* 🌟 追加：カード効果を名前の下に表示 */}
+                  {card.effect && (
+                    <div style={{ fontSize: '0.75rem', color: '#f1c40f', marginTop: '4px' }}>
+                      {card.effect}
+                    </div>
+                  )}
                 </div>
               ))
             )}
