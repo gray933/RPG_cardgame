@@ -1,6 +1,6 @@
 // src/App.jsx
 import { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore'; 
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth, provider } from './firebase';
 import DeckBuilder from './components/DeckBuilder';
@@ -11,8 +11,8 @@ import './App.css';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null); 
-  const [inputNickname, setInputNickname] = useState(''); 
+  const [userProfile, setUserProfile] = useState(null);
+  const [inputNickname, setInputNickname] = useState('');
 
   const [currentScreen, setCurrentScreen] = useState('title');
   const [playerDeck, setPlayerDeck] = useState([]);
@@ -35,7 +35,7 @@ function App() {
           setCurrentScreen('title');
         } else {
           setUserProfile(null);
-          setCurrentScreen('set_nickname'); 
+          setCurrentScreen('set_nickname');
         }
       } else {
         setCurrentUser(null);
@@ -83,7 +83,7 @@ function App() {
     try {
       const myDeckDocName = `deck_${currentUser.uid}_${slotNum}`;
       const playerDeckDoc = await getDoc(doc(db, "decks", myDeckDocName));
-      
+
       const loadedDeck = playerDeckDoc.exists() ? playerDeckDoc.data().cards || [] : [];
       setPlayerDeck(loadedDeck);
 
@@ -96,9 +96,9 @@ function App() {
         setEnemyDeck(eDeck);
         setCurrentScreen('battle');
       } else if (selectPurpose === 'pvp') {
-        if (loadedDeck.length !== 20) { 
-          alert(`⚠️ デッキが未完成です（${loadedDeck.length}/20枚）。編成してから選んでください！`); 
-          return; 
+        if (loadedDeck.length !== 20) {
+          alert(`⚠️ デッキが未完成です（${loadedDeck.length}/20枚）。編成してから選んでください！`);
+          return;
         }
         setCurrentScreen('matching');
       }
@@ -116,9 +116,9 @@ function App() {
         <h1 style={{ fontSize: '3.5rem', color: '#f1c40f', textShadow: '0 0 10px rgba(241,196,15,0.3)', marginBottom: '10px' }}>RPG CARD GAME</h1>
         <div style={{ background: '#2c3e50', padding: '40px', borderRadius: '12px', border: '2px solid #34495e', maxWidth: '400px', width: '100%' }}>
           <p style={{ marginBottom: '25px', fontSize: '1.1rem' }}>ゲームをプレイするには<br />Googleアカウントでの認証が必要です。</p>
-          <button 
-            className="pc-menu-btn" 
-            style={{ background: '#dd4b39', color: 'white', fontSize: '1.2rem', padding: '15px 0', width: '100%', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }} 
+          <button
+            className="pc-menu-btn"
+            style={{ background: '#dd4b39', color: 'white', fontSize: '1.2rem', padding: '15px 0', width: '100%', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
             onClick={handleLogin}
           >
             🔴 Googleアカウントでログイン
@@ -134,7 +134,7 @@ function App() {
       <div style={{ textAlign: 'center', padding: '100px 20px', background: '#1e272e', minHeight: '100vh', color: 'white' }}>
         <h2 style={{ fontSize: '2.5rem', color: '#f1c40f', marginBottom: '20px' }}>はじめまして！</h2>
         <p style={{ fontSize: '1.2rem', marginBottom: '40px', color: '#bdc3c7' }}>
-          ゲーム内で他のプレイヤーに表示される<br/>「ニックネーム」を決めてください。
+          ゲーム内で他のプレイヤーに表示される<br />「ニックネーム」を決めてください。
         </p>
         <input
           type="text"
@@ -157,11 +157,11 @@ function App() {
 
   return (
     <div className="app-container" style={{ width: '100%', minHeight: '100vh', background: '#1e272e', position: 'relative' }}>
-      
+
       <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', alignItems: 'center', gap: '15px', zIndex: 90, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', border: '1px solid #485460' }}>
         <span style={{ color: '#d2dae2', fontSize: '0.9rem' }}>👤 {userProfile.nickname}</span>
-        <button 
-          onClick={handleLogout} 
+        <button
+          onClick={handleLogout}
           style={{ padding: '3px 10px', background: '#c0392b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
         >
           ログアウト
@@ -197,10 +197,10 @@ function App() {
           {!isLoaded && <h3 style={{ color: '#f1c40f' }}>📥 デッキデータをロード中...</h3>}
           <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '20px', margin: '40px auto', maxWidth: '800px' }}>
             {[1, 2, 3, 4, 5].map(num => (
-              <button 
-                key={num} 
-                className="pc-menu-btn" 
-                style={{ width: '130px', padding: '25px 0', background: '#34495e', fontSize: '1.2rem', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }} 
+              <button
+                key={num}
+                className="pc-menu-btn"
+                style={{ width: '130px', padding: '25px 0', background: '#34495e', fontSize: '1.2rem', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }}
                 onClick={() => handleSlotSelect(num)}
               >
                 🃏 デッキ {num}
@@ -212,17 +212,17 @@ function App() {
       )}
 
       {currentScreen === 'deck' && (
-        <DeckBuilder 
-          slotId={selectedSlot} 
-          userId={currentUser.uid} 
-          onBack={() => setCurrentScreen('home')} 
+        <DeckBuilder
+          slotId={selectedSlot}
+          userId={currentUser.uid}
+          onBack={() => setCurrentScreen('home')}
         />
       )}
 
       {currentScreen === 'matching' && (
-        <MatchingScreen 
+        <MatchingScreen
           myDeck={playerDeck}
-          playerName={userProfile.nickname} 
+          playerName={userProfile.nickname}
           onBack={() => setCurrentScreen('home')}
           onBattleStart={(roomId, role) => {
             setPvpRoomId(roomId);
@@ -233,17 +233,16 @@ function App() {
       )}
 
       {currentScreen === 'battle' && (
-        <BattleScreen 
-          playerDeckData={playerDeck} 
-          enemyDeckData={enemyDeck} 
-          onBack={() => setCurrentScreen('home')} 
+        <BattleScreen
+          playerDeckData={playerDeck}
+          enemyDeckData={enemyDeck}
+          onBack={() => setCurrentScreen('home')}
           isPvP={selectPurpose === 'pvp'}
           roomId={pvpRoomId}
           myRole={pvpRole}
         />
       )}
-
-      {currentScreen === 'dev_dashboard' && (
+      {currentScreen === 'dev_dashboard' && import.meta.env.DEV && (
         <DevDashboard onBack={() => setCurrentScreen('home')} />
       )}
     </div>
