@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "cardgame-8b727"
-  }
+  },
+  "targets": {
+    "cardgame-8b727": {
+      "hosting": {
+        "prod": [
+          "cardgame-8b727"
+        ],
+        "dev": [
+          "rpg-cardgame-dev"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

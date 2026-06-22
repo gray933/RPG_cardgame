@@ -42,7 +42,9 @@ function DevDashboard({ onBack }) {
     e.preventDefault();
     if (!cardName.trim()) return alert("カード名を入力してください");
 
+    // ドキュメントIDとして使用するため、カード名を変数に格納
     const cardId = cardName.trim();
+    
     const cardData = {
       name: cardName.trim(),
       cardType,
@@ -60,8 +62,12 @@ function DevDashboard({ onBack }) {
     };
 
     try {
+      // 変更前: await addDoc(collection(db, "cards"), cardData);
+      // 変更後: doc()でドキュメントパスとIDを明確に指定し、setDocで上書き保存する
       await setDoc(doc(db, "cards", cardId), cardData);
-      alert(`🎉 カード「${cardName}」の登録・更新に成功しました！`);
+      
+      alert(`カード「${cardName}」の登録・更新に成功しました`);
+      
       setCardName("");
       setEffectText("");
       setEffectTargetName("");

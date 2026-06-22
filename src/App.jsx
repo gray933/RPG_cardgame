@@ -185,7 +185,7 @@ function App() {
             <button className="pc-menu-btn" style={{ padding: '20px', fontSize: '1.4rem', background: '#9b59b6', boxShadow: '0 5px 15px rgba(155,89,182,0.4)' }} onClick={() => { setSelectPurpose('pvp'); setCurrentScreen('deck_select'); }}>🌐 オンライン対人戦 (PvP)</button>
             <button className="pc-menu-btn" style={{ padding: '20px', fontSize: '1.4rem', background: '#3498db' }} onClick={() => { setSelectPurpose('battle'); setCurrentScreen('deck_select'); }}>⚔️ VS コンピューター (AI)</button>
             <button className="pc-menu-btn" style={{ padding: '20px', background: '#2ecc71' }} onClick={() => { setSelectPurpose('edit'); setCurrentScreen('deck_select'); }}>🛠 デッキを構築する</button>
-            {import.meta.env.DEV && (
+            {import.meta.env.VITE_SHOW_DEV === "true" && (
               <button className="pc-menu-btn" style={{ padding: '15px', background: '#e74c3c', marginTop: '30px' }} onClick={() => setCurrentScreen('dev_dashboard')}>⚙️ 開発者ツール（カード図鑑）</button>
             )}
           </div>
@@ -244,7 +244,7 @@ function App() {
           myRole={pvpRole}
         />
       )}
-      {currentScreen === 'dev_dashboard' && import.meta.env.DEV && (
+      {currentScreen === 'dev_dashboard' && import.meta.env.VITE_SHOW_DEV === "true" && (
         <DevDashboard onBack={() => setCurrentScreen('home')} />
       )}
     </div>
