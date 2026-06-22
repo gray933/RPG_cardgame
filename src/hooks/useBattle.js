@@ -396,9 +396,19 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
     useEffect(() => {
         if (isPvP || localGameState !== 'playing') return;
         
-        if (localEnemyLife <= 0 || localPlayerLife <= 0) {
+        // 🌟 金塊の枚数をカウント
+        const pGoldCount = localPlayerHand.filter(c => c?.name === "金塊").length;
+        const eGoldCount = localEnemyHand.filter(c => c?.name === "金塊").length;
+
+        if (pGoldCount >= 6 || eGoldCount >= 6 || localEnemyLife <= 0 || localPlayerLife <= 0) {
             setTimeout(() => {
-                if (localEnemyLife <= 0) {
+                if (pGoldCount >= 6) {
+                    setLocalGameState('win');
+                    triggerPopup("特殊勝利：金塊を6枚集めた！");
+                } else if (eGoldCount >= 6) {
+                    setLocalGameState('lose');
+                    triggerPopup("特殊敗北：相手が金塊を集めきった…");
+                } else if (localEnemyLife <= 0) {
                     setLocalGameState('win');
                     triggerPopup("YOU WIN");
                 } else if (localPlayerLife <= 0) {
@@ -407,7 +417,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 }
             }, 0);
         }
-    }, [isPvP, localPlayerLife, localEnemyLife, localGameState]);
+    }, [isPvP, localPlayerLife, localEnemyLife, localPlayerHand, localEnemyHand, localGameState]);
 
     useEffect(() => {
         if (isPvP || localGameState !== 'playing') return;
@@ -436,8 +446,8 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
     };
 
     const checkGameEndPvP = (updates, nPLife, nELife, nPHand, nEHand) => {
-        if (nPHand.filter(c => c?.name === "金塊").length >= 8) { updates['status'] = 'finished'; updates['winner'] = myRole; return; }
-        if (nEHand.filter(c => c?.name === "金塊").length >= 8) { updates['status'] = 'finished'; updates['winner'] = enemyRole; return; }
+        if (nPHand.filter(c => c?.name === "金塊").length >= 6) { updates['status'] = 'finished'; updates['winner'] = myRole; return; }
+        if (nEHand.filter(c => c?.name === "金塊").length >= 6) { updates['status'] = 'finished'; updates['winner'] = enemyRole; return; }
         if (nELife <= 0) { updates['status'] = 'finished'; updates['winner'] = myRole; }
         else if (nPLife <= 0) { updates['status'] = 'finished'; updates['winner'] = enemyRole; }
     };

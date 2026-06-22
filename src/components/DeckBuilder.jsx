@@ -21,7 +21,20 @@ function DeckBuilder({ slotId, userId, onBack }) {
         const myDeckDocName = `deck_${userId}_${slotId}`;
         const deckDoc = await getDoc(doc(db, "decks", myDeckDocName));
         if (deckDoc.exists()) {
-          setDeckCards(deckDoc.data().cards || []);
+          const loadedRawData = deckDoc.data().cards || [];
+          
+          // 名前（文字列）で保存されている場合はマスター(list)から検索して復元、
+          // 古い形式（オブジェクト）の場合はそのまま使う処理
+          const reconstructedDeck = loadedRawData.map(item => {
+            if (typeof item === 'string') {
+              return list.find(c => c.name === item);
+            } else {
+              // 昔のオブジェクト形式のデータ用フォールバック
+              return list.find(c => c.name === item.name) || item;
+            }
+          }).filter(Boolean); // 削除されてしまったカード（undefined）を配列から弾く
+
+          setDeckCards(reconstructedDeck);
         } else {
           setDeckCards([]);
         }
@@ -48,12 +61,10 @@ function DeckBuilder({ slotId, userId, onBack }) {
   const saveDeck = async () => {
     try {
       const myDeckDocName = `deck_${userId}_${slotId}`;
-      await setDoc(doc(db, "decks", myDeckDocName), {
-        cards: deckCards,
-        updatedAt: new Date().toISOString()
-      });
+      const deckCardNames = deckCards.map(card => card.name);
+      await setDoc(doc(db, "decks", myDeckDocName), { cards: deckCardNames });
       // 🌟 ポップアップを「デッキ X」に修正
-      alert(`🎉 デッキ ${slotId} に自分専用デッキを保存しました！ (${deckCards.length}/20枚)`);
+      alert(`デッキ ${slotId} にマイデッキを保存しました！ (${deckCards.length}/20枚)`);
     } catch (error) {
       console.error(error);
       alert("⚠️ 保存に失敗しました");

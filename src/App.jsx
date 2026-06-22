@@ -1,6 +1,6 @@
 // src/App.jsx
 import { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, getDocs } from 'firebase/firestore';
 import { signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth, provider } from './firebase';
 import DeckBuilder from './components/DeckBuilder';
@@ -76,23 +76,46 @@ function App() {
     }
   };
 
-  // アカウント別のデッキを読み込む処理（ドキュメント名も自動的に1〜5に対応します）
+  // アカウント別のデッキを読み込む処理
   const handleSlotSelect = async (slotNum) => {
     setSelectedSlot(slotNum);
     setIsLoaded(false);
     try {
+      // 🌟 追加: まずマスターのカードデータを全て取得する
+      const cardsSnap = await getDocs(collection(db, "cards"));
+      const allMasterCards = cardsSnap.docs.map(doc => doc.data());
+
       const myDeckDocName = `deck_${currentUser.uid}_${slotNum}`;
       const playerDeckDoc = await getDoc(doc(db, "decks", myDeckDocName));
 
-      const loadedDeck = playerDeckDoc.exists() ? playerDeckDoc.data().cards || [] : [];
+      // 🌟 修正: 保存されているのが名前か実態か判定し、実データに復元する
+      const loadedRawData = playerDeckDoc.exists() ? playerDeckDoc.data().cards || [] : [];
+      const loadedDeck = loadedRawData.map(item => {
+        if (typeof item === 'string') {
+          // 名前（文字列）で保存されている新形式なら、マスターデータから検索して最新版を取得
+          return allMasterCards.find(c => c.name === item);
+        } else {
+          // 昔のデータ（オブジェクト）が残っていればそのまま使うか、名前で再検索する
+          return allMasterCards.find(c => c.name === item.name) || item;
+        }
+      }).filter(Boolean); // 削除されて存在しないカードを弾く
+
       setPlayerDeck(loadedDeck);
 
       if (selectPurpose === 'edit') {
         setCurrentScreen('deck');
       } else if (selectPurpose === 'battle') {
         if (loadedDeck.length !== 20) { return alert(`⚠️ デッキが未完成です`); }
+        
         const enemyDeckDoc = await getDoc(doc(db, "decks", "enemy_deck_1"));
-        const eDeck = enemyDeckDoc.exists() ? enemyDeckDoc.data().cards || [] : [];
+        
+        // 🌟 敵のデッキも最新能力になるように復元処理を通す
+        const eRawData = enemyDeckDoc.exists() ? enemyDeckDoc.data().cards || [] : [];
+        const eDeck = eRawData.map(item => {
+           if (typeof item === 'string') return allMasterCards.find(c => c.name === item);
+           return allMasterCards.find(c => c.name === item.name) || item;
+        }).filter(Boolean);
+
         setEnemyDeck(eDeck);
         setCurrentScreen('battle');
       } else if (selectPurpose === 'pvp') {
