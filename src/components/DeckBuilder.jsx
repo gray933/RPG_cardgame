@@ -18,11 +18,11 @@ function DeckBuilder({ slotId, userId, onBack }) {
         const list = cardsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAllCards(list);
         console.log("読み込んだカードの枚数:", list.length);
-        const myDeckDocName = `deck_${userId}_${slotId}`;
+        const myDeckDocName = userId === "NPC" ? "enemy_deck_1" : `deck_${userId}_${slotId}`;
         const deckDoc = await getDoc(doc(db, "decks", myDeckDocName));
         if (deckDoc.exists()) {
           const loadedRawData = deckDoc.data().cards || [];
-          
+
           // 名前（文字列）で保存されている場合はマスター(list)から検索して復元、
           // 古い形式（オブジェクト）の場合はそのまま使う処理
           const reconstructedDeck = loadedRawData.map(item => {
@@ -60,7 +60,7 @@ function DeckBuilder({ slotId, userId, onBack }) {
 
   const saveDeck = async () => {
     try {
-      const myDeckDocName = `deck_${userId}_${slotId}`;
+      const myDeckDocName = userId === "NPC" ? "enemy_deck_1" : `deck_${userId}_${slotId}`;
       const deckCardNames = deckCards.map(card => card.name);
       await setDoc(doc(db, "decks", myDeckDocName), { cards: deckCardNames });
       // 🌟 ポップアップを「デッキ X」に修正

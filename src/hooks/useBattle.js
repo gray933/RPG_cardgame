@@ -17,14 +17,21 @@ const processDraw = (drawCount, currentDeck, currentHand, currentGrave, currentL
             const nonManaGrave = g.filter(c => !c.isMana);
             if (nonManaGrave.length === 0) break;
             life -= 5;
-            d = nonManaGrave.sort(() => Math.random() - 0.5);
+            // 🌟 墓地からデッキに戻る際に、HPと攻撃力を元の状態にリセットする
+            d = nonManaGrave.map(c => {
+                let resetCard = { ...c };
+                if (resetCard.originalHp !== undefined) resetCard.hp = resetCard.originalHp;
+                if (resetCard.originalPower !== undefined) resetCard.power = resetCard.originalPower;
+                resetCard.hasAttacked = false;
+                return resetCard;
+            }).sort(() => Math.random() - 0.5);
             g = g.filter(c => c.isMana);
         }
-        if (d.length > 0) {
-            const drawnCard = d.shift();
-            if (h.length < 10) h.push(drawnCard);
-            else if (!drawnCard.isMana) g.push(drawnCard);
-        }
+    }
+    if (d.length > 0) {
+        const drawnCard = d.shift();
+        if (h.length < 10) h.push(drawnCard);
+        else if (!drawnCard.isMana) g.push(drawnCard);
     }
     return { d, h, g, life };
 };
@@ -71,7 +78,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
     const enemyGrave = useRemote ? (enemyData.graveyard || []) : localEnemyGrave;
 
     const isPlayerTurn = useRemote ? (roomData.currentTurn === myRole) : localIsPlayerTurn;
-    const gameState = useRemote 
+    const gameState = useRemote
         ? (roomData.status === 'finished' ? (roomData.winner === myRole ? 'win' : 'lose') : 'playing')
         : localGameState;
 
@@ -112,8 +119,8 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 else setLocalEnemyField(f => f.map(c => ({ ...c, power: (c.power || 0) + val, hp: (c.hp || 0) + val })));
                 break;
             case "increase_max_hp":
-                if (isPlayerContext) { setLocalPlayerMaxLife(p => p + val); setLocalPlayerLife(p => p + val); }
-                else { setLocalEnemyMaxLife(p => p + val); setLocalEnemyLife(p => p + val); }
+                if (isPlayerContext) { setLocalPlayerMaxLife(p => p + val); }
+                else { setLocalEnemyMaxLife(p => p + val); }
                 break;
             case "search_card_to_hand": {
                 const targetName = card.effectTargetName ? card.effectTargetName.trim() : "";
@@ -146,7 +153,8 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                         triggerPopup(`デッキから[${targetName}]をフィールドに召喚`);
                         const foundCard = localPlayerDeck[matchIdx];
                         setLocalPlayerDeck(localPlayerDeck.filter((_, idx) => idx !== matchIdx).sort(() => Math.random() - 0.5));
-                        setLocalPlayerField(prev => [...prev, { ...foundCard, hasAttacked: true }]);
+                        // 🌟 修正
+                        setLocalPlayerField(prev => [...prev, { ...foundCard, hasAttacked: true, originalHp: foundCard.originalHp ?? foundCard.hp, originalPower: foundCard.originalPower ?? foundCard.power }]);
                     } else { triggerPopup(`召喚に失敗しました`); }
                 } else {
                     const matchIdx = localEnemyDeck.findIndex(c => c.name === targetName);
@@ -154,7 +162,8 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                         triggerPopup(`相手がデッキから[${targetName}]をフィールドに召喚`);
                         const foundCard = localEnemyDeck[matchIdx];
                         setLocalEnemyDeck(localEnemyDeck.filter((_, idx) => idx !== matchIdx).sort(() => Math.random() - 0.5));
-                        setLocalEnemyField(prev => [...prev, { ...foundCard, hasAttacked: true }]);
+                        // 🌟 修正
+                        setLocalEnemyField(prev => [...prev, { ...foundCard, hasAttacked: true, originalHp: foundCard.originalHp ?? foundCard.hp, originalPower: foundCard.originalPower ?? foundCard.power }]);
                     }
                 }
                 break;
@@ -204,6 +213,58 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 }
                 break;
             }
+            // 🌟 追加: 破壊・ダメージなどの対象指定効果のAI処理（ランダム対象として機能させる）
+            case "destroy_single_enemy":
+                if (isPlayerContext) {
+                    setLocalEnemyField(prev => {
+                        if (prev.length === 0) return prev;
+                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        triggerPopup(`[${card.name}]の効果！相手の[${n[idx].name}]を破壊！`);
+                        n[idx].hp = 0; return n;
+                    });
+                } else {
+                    setLocalPlayerField(prev => {
+                        if (prev.length === 0) return prev;
+                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        triggerPopup(`相手の[${card.name}]が味方の[${n[idx].name}]を破壊！`);
+                        n[idx].hp = 0; return n;
+                    });
+                }
+                break;
+            case "damage_single_enemy":
+                if (isPlayerContext) {
+                    setLocalEnemyField(prev => {
+                        if (prev.length === 0) return prev;
+                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        triggerPopup(`[${card.name}]の効果！[${n[idx].name}]に${val}ダメージ！`);
+                        n[idx].hp -= val; return n;
+                    });
+                } else {
+                    setLocalPlayerField(prev => {
+                        if (prev.length === 0) return prev;
+                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        triggerPopup(`相手が味方の[${n[idx].name}]に${val}ダメージ！`);
+                        n[idx].hp -= val; return n;
+                    });
+                }
+                break;
+            case "buff_single_ally":
+                if (isPlayerContext) {
+                    setLocalPlayerField(prev => {
+                        if (prev.length === 0) return prev;
+                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        triggerPopup(`[${card.name}]の効果！味方の[${n[idx].name}]を強化`);
+                        n[idx].power += val; n[idx].hp += val; return n;
+                    });
+                } else {
+                    setLocalEnemyField(prev => {
+                        if (prev.length === 0) return prev;
+                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        triggerPopup(`相手が[${n[idx].name}]を強化！`);
+                        n[idx].power += val; n[idx].hp += val; return n;
+                    });
+                }
+                break;
             default: break;
         }
     };
@@ -245,9 +306,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             }
             case "increase_max_hp": {
                 let maxHp = getVal(`${mPath}.maxHp`, isPlayerContext ? playerMaxLife : enemyMaxLife);
-                let hp = getVal(`${mPath}.hp`, isPlayerContext ? playerLife : enemyLife);
                 updates[`${mPath}.maxHp`] = maxHp + val;
-                updates[`${mPath}.hp`] = hp + val;
                 break;
             }
             case "search_card_to_hand": {
@@ -272,11 +331,12 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 let field = [...getVal(`${mPath}.field`, isPlayerContext ? playerField : enemyField)];
                 const matchIdx = deck.findIndex(c => c.name === targetName);
                 if (matchIdx !== -1 && field.length < 4) {
-                    field.push({ ...deck[matchIdx], hasAttacked: true });
-                    deck = deck.filter((_, idx) => idx !== matchIdx).sort(() => Math.random() - 0.5);
-                    updates[`${mPath}.deck`] = deck;
-                    updates[`${mPath}.field`] = field;
-                    triggerPopup(isPlayerContext ? `デッキから[${targetName}]をフィールドに召喚` : `相手がデッキから[${targetName}]をフィールドに召喚`);
+                    field.push({
+                        ...deck[matchIdx],
+                        hasAttacked: true,
+                        originalHp: deck[matchIdx].originalHp ?? deck[matchIdx].hp,
+                        originalPower: deck[matchIdx].originalPower ?? deck[matchIdx].power
+                    });
                 }
                 break;
             }
@@ -374,7 +434,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
 
     useEffect(() => {
         if (isPvP) return;
-        
+
         const pDeck = JSON.parse(JSON.stringify(playerDeckData || []));
         const eDeck = JSON.parse(JSON.stringify(enemyDeckData || []));
         pDeck.sort(() => Math.random() - 0.5);
@@ -395,7 +455,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
 
     useEffect(() => {
         if (isPvP || localGameState !== 'playing') return;
-        
+
         // 🌟 金塊の枚数をカウント
         const pGoldCount = localPlayerHand.filter(c => c?.name === "金塊").length;
         const eGoldCount = localEnemyHand.filter(c => c?.name === "金塊").length;
@@ -428,12 +488,12 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             setTimeout(() => {
                 if (deadP.length > 0) {
                     deadP.forEach(c => { if (c.trigger === "death") executeSkillLocal(c, true); });
-                    setLocalPlayerGrave(p => [...p, ...deadP]); 
+                    setLocalPlayerGrave(p => [...p, ...deadP]);
                     setLocalPlayerField(p => p.filter(c => c.hp > 0));
                 }
                 if (deadE.length > 0) {
                     deadE.forEach(c => { if (c.trigger === "death") executeSkillLocal(c, false); });
-                    setLocalEnemyGrave(p => [...p, ...deadE]); 
+                    setLocalEnemyGrave(p => [...p, ...deadE]);
                     setLocalEnemyField(p => p.filter(c => c.hp > 0));
                 }
             }, 0);
@@ -476,7 +536,10 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             consumedManaIndices = available.slice(0, reqCost);
         }
 
-        if (cardToPlay.trigger === "play" && TARGETED_EFFECTS.includes(cardToPlay.effectType)) {
+        // 🌟 追加: 魔法カードも対象選択の判定に含める
+        const isEffectActivatable = cardToPlay.trigger === "play" || cardToPlay.cardType === "magic";
+
+        if (isEffectActivatable && TARGETED_EFFECTS.includes(cardToPlay.effectType)) {
             if (cardToPlay.effectType.includes("enemy") && enemyField.length === 0) { triggerPopup("対象となる敵がいません"); return; }
             if (cardToPlay.effectType.includes("ally") && playerField.length === 0) { triggerPopup("対象となる味方がいません"); return; }
             setPendingTarget({ handIndex, card: cardToPlay, consumedManaIndices, initialUpdates: updates });
@@ -495,8 +558,16 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         if (cardToPlay.cardType === "magic") {
             triggerPopup(`${cardToPlay.name}を発動`); nextGrave.push(cardToPlay);
         } else {
-            triggerPopup(`${cardToPlay.name}を召喚`); nextField.push({ ...cardToPlay, hasAttacked: true });
+            triggerPopup(`${cardToPlay.name}を召喚`);
+            nextField.push({
+                ...cardToPlay,
+                hasAttacked: true,
+                originalHp: cardToPlay.originalHp ?? cardToPlay.hp,      // 🌟 元のHPを記憶
+                originalPower: cardToPlay.originalPower ?? cardToPlay.power // 🌟 元の攻撃力を記憶
+            });
         }
+
+        const isEffectActivatable = cardToPlay.trigger === "play" || cardToPlay.cardType === "magic";
 
         if (isPvP) {
             let updates = { ...initialUpdates };
@@ -504,7 +575,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             updates[`${myPath}.graveyard`] = nextGrave;
             updates[`${myPath}.field`] = nextField;
 
-            if (cardToPlay.trigger === "play" && !TARGETED_EFFECTS.includes(cardToPlay.effectType)) {
+            if (isEffectActivatable && !TARGETED_EFFECTS.includes(cardToPlay.effectType)) {
                 await executeSkillPvP(cardToPlay, true, updates);
             }
 
@@ -513,7 +584,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             await pushGameStateToDB(updates);
         } else {
             setLocalPlayerHand(newHand); setLocalPlayerGrave(nextGrave); setLocalPlayerField(nextField);
-            if (cardToPlay.trigger === "play" && !TARGETED_EFFECTS.includes(cardToPlay.effectType)) {
+            if (isEffectActivatable && !TARGETED_EFFECTS.includes(cardToPlay.effectType)) {
                 if (cardToPlay.effectType === "draw_card") {
                     const res = processDraw(cardToPlay.effectValue, localPlayerDeck, newHand, nextGrave, localPlayerLife);
                     setLocalPlayerDeck(res.d); setLocalPlayerHand(res.h); setLocalPlayerGrave(res.g); setLocalPlayerLife(res.life);
@@ -708,24 +779,35 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         }
 
         // 🤖 CPU処理
-        setLocalIsPlayerTurn(false); setSelectedAttackerIdx(null);
+        setLocalIsPlayerTurn(false);
+        setSelectedAttackerIdx(null);
 
+        // プレイヤーのターン終了時効果
         localPlayerField.forEach(c => { if (c.trigger === "turn_end") executeSkillLocal(c, true); });
 
+        // プレイヤーのドロー計算 (最新のライフを上書きしないよう、差分だけを計算しておく)
         let pDrawRes = processDraw(1, localPlayerDeck, localPlayerHand, localPlayerGrave, localPlayerLife);
         if (pDrawRes.h.length < 10) pDrawRes.h.push(JSON.parse(JSON.stringify(MANA_CARD)));
+        const playerFatigueDamage = localPlayerLife - pDrawRes.life;
 
-        setTimeout(() => {
+        // CPUのターン開始を少し待機
+        setTimeout(async () => {
             if (localGameState !== 'playing') return;
+
+            // CPUのドロー
             let eDrawRes = processDraw(1, localEnemyDeck, localEnemyHand, localEnemyGrave, localEnemyLife);
             if (eDrawRes.h.length < 10) eDrawRes.h.push(JSON.parse(JSON.stringify(MANA_CARD)));
 
-            let newEField = [...localEnemyField]; let currentEnemyHand = [...eDrawRes.h];
+            let currentEField = [...localEnemyField];
+            let currentEnemyHand = [...eDrawRes.h];
+            let currentPlayerField = [...localPlayerField];
             let loopSafety = 0;
 
-            localEnemyField.forEach(c => { if (c.trigger === "turn_start") executeSkillLocal(c, false); });
+            // ターン開始時効果
+            currentEField.forEach(c => { if (c.trigger === "turn_start") executeSkillLocal(c, false); });
 
-            while (newEField.length < 4 && loopSafety < 10) {
+            // 【召喚フェイズ】
+            while (currentEField.length < 4 && loopSafety < 10) {
                 loopSafety++;
                 const aiMana = currentEnemyHand.filter(c => c.isMana).length;
                 const playable = currentEnemyHand
@@ -734,65 +816,120 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                     .sort((a, b) => (b.card.cost || 0) - (a.card.cost || 0));
 
                 if (playable.length === 0) break;
+
                 const targetItem = playable[0];
                 const cost = targetItem.card.cost || 1;
 
+                // 手札から対象のカードを削除
+                currentEnemyHand.splice(targetItem.originalIdx, 1);
+
+                // マナを消費
                 let consumed = 0;
                 currentEnemyHand = currentEnemyHand.filter(c => !(c.isMana && consumed < cost && ++consumed));
-                currentEnemyHand = currentEnemyHand.filter((_, idx) => idx !== targetItem.originalIdx);
 
                 triggerPopup(`相手が[${targetItem.card.name}]を召喚`);
-                newEField.push({ ...targetItem.card, hasAttacked: true });
-                
-                if (targetItem.card.trigger === "play") executeSkillLocal(targetItem.card, false);
+
+                const summoned = {
+                    ...targetItem.card,
+                    hasAttacked: true, // 召喚酔い
+                    originalHp: targetItem.card.originalHp ?? targetItem.card.hp,
+                    originalPower: targetItem.card.originalPower ?? targetItem.card.power
+                };
+
+                currentEField.push(summoned);
+                setLocalEnemyField([...currentEField]); // 描画を更新
+                setLocalEnemyHand([...currentEnemyHand]);
+
+                // 効果発動（少し待機して演出）
+                await new Promise(resolve => setTimeout(resolve, 800));
+                if (targetItem.card.trigger === "play") {
+                    await executeSkillLocal(targetItem.card, false);
+                }
             }
 
-            setLocalEnemyDeck(eDrawRes.d); setLocalEnemyHand(currentEnemyHand); setLocalEnemyField(newEField);
+            setLocalEnemyDeck(eDrawRes.d);
 
-            let currentPlayerField = [...localPlayerField].filter(c => c.hp > 0);
-            const readyAttackers = newEField.filter(card => !card.hasAttacked);
+            // 【攻撃フェイズ】
+            // 🌟 修正: idではなく、配列の「インデックス番号」で確実に対象を特定する
+            let readyAttackers = currentEField
+                .map((c, i) => ({ card: { ...c }, index: i }))
+                .filter(item => !item.card.hasAttacked);
 
-            if (readyAttackers.length === 0) {
-                newEField.forEach(c => { if (c.trigger === "turn_end") executeSkillLocal(c, false); });
-                setLocalPlayerDeck(pDrawRes.d); setLocalPlayerHand(pDrawRes.h); setLocalPlayerGrave(pDrawRes.g); setLocalPlayerLife(pDrawRes.life);
-                setLocalPlayerField(prev => prev.map(c => ({ ...c, hasAttacked: false }))); setLocalIsPlayerTurn(true);
-                localPlayerField.forEach(c => { if (c.trigger === "turn_start") executeSkillLocal(c, true); });
-            } else {
-                let currentAttackerIdx = 0;
-                const attackRoutine = setInterval(() => {
-                    if (localPlayerLife <= 0 || localGameState !== 'playing') { clearInterval(attackRoutine); return; }
-                    if (currentAttackerIdx < readyAttackers.length) {
-                        const attacker = readyAttackers[currentAttackerIdx];
-                        
-                        if (attacker.trigger === "attack") executeSkillLocal(attacker, false);
+            for (let { card: attacker, index: attackerIdx } of readyAttackers) {
+                if (localGameState !== 'playing') break;
+                if (attacker.hp <= 0) continue; // すでに死亡している場合はスキップ
 
-                        let targetMinionIdx = currentPlayerField.findIndex(em => (attacker.power || 0) >= (em.hp || 0));
+                // 攻撃演出のための待機
+                await new Promise(resolve => setTimeout(resolve, 1200));
 
-                        if (targetMinionIdx !== -1) {
-                            const targetMinion = currentPlayerField[targetMinionIdx];
-                            triggerPopup(`相手の[${attacker.name}]が[${targetMinion.name}]を攻撃`);
-                            targetMinion.hp -= (attacker.power || 0); attacker.hp -= (targetMinion.power || 0);
+                if (attacker.trigger === "attack") {
+                    await executeSkillLocal(attacker, false);
+                }
 
-                            if (targetMinion.hp <= 0) setLocalPlayerGrave(g => [...g, targetMinion]);
-                            if (attacker.hp <= 0) setLocalEnemyGrave(g => [...g, attacker]);
+                // 攻撃目標の選定（最新のプレイヤー盤面を参照）
+                let targetMinionIdx = currentPlayerField.findIndex(em => (attacker.power || 0) >= (em.hp || 0));
 
-                            currentPlayerField = currentPlayerField.filter(c => c.hp > 0);
-                            setLocalPlayerField(currentPlayerField);
-                        } else {
-                            triggerPopup(`相手の[${attacker.name}]によるダイレクトアタック`);
-                            setLocalPlayerLife(prev => Math.max(0, prev - (attacker.power || 0)));
-                        }
-                        currentAttackerIdx++;
-                    } else {
-                        clearInterval(attackRoutine);
-                        setLocalEnemyField(prev => prev.map(c => ({ ...c, hasAttacked: false })));
-                        newEField.forEach(c => { if (c.trigger === "turn_end") executeSkillLocal(c, false); });
-                        setLocalPlayerDeck(pDrawRes.d); setLocalPlayerHand(pDrawRes.h); setLocalPlayerGrave(pDrawRes.g); setLocalPlayerLife(pDrawRes.life);
-                        setLocalPlayerField(prev => prev.map(c => ({ ...c, hasAttacked: false }))); setLocalIsPlayerTurn(true);
-                        localPlayerField.forEach(c => { if (c.trigger === "turn_start") executeSkillLocal(c, true); });
+                if (targetMinionIdx !== -1) {
+                    const targetMinion = { ...currentPlayerField[targetMinionIdx] };
+                    triggerPopup(`相手の[${attacker.name}]が[${targetMinion.name}]を攻撃`);
+
+                    targetMinion.hp -= (attacker.power || 0);
+                    attacker.hp -= (targetMinion.power || 0);
+
+                    // 墓地送り処理
+                    if (targetMinion.hp <= 0) {
+                        setLocalPlayerGrave(g => [...g, targetMinion]);
                     }
-                }, 1200);
+                    if (attacker.hp <= 0) {
+                        setLocalEnemyGrave(g => [...g, attacker]);
+                    }
+
+                    // 盤面更新
+                    currentPlayerField[targetMinionIdx] = targetMinion;
+                    currentPlayerField = currentPlayerField.filter(c => c.hp > 0);
+                    setLocalPlayerField([...currentPlayerField]);
+
+                    // インデックスを維持したまま更新
+                    currentEField[attackerIdx] = attacker;
+                    setLocalEnemyField(currentEField.filter(c => c.hp > 0));
+
+                } else {
+                    triggerPopup(`相手の[${attacker.name}]によるダイレクトアタック`);
+                    setLocalPlayerLife(prev => Math.max(0, prev - (attacker.power || 0)));
+                }
             }
+
+            // すべての攻撃が終わった後に、死亡したカードを盤面から消去
+            currentEField = currentEField.filter(c => c.hp > 0);
+
+            // 攻撃フェイズ終了時の待機
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // 【CPUターン終了処理】
+            let finalEField = currentEField.map(c => ({ ...c, hasAttacked: false }));
+            setLocalEnemyField(finalEField);
+
+            finalEField.forEach(c => { if (c.trigger === "turn_end") executeSkillLocal(c, false); });
+
+            // プレイヤーのターン開始処理
+            setLocalPlayerDeck(pDrawRes.d);
+            setLocalPlayerHand(pDrawRes.h);
+
+            // 🌟 修正: 直接ライフを上書きせず、もしファティーグ(山札切れ)ダメージを受けていたらそれだけを引く
+            if (playerFatigueDamage > 0) {
+                setLocalPlayerLife(prev => Math.max(0, prev - playerFatigueDamage));
+            }
+            if (pDrawRes.g.length !== localPlayerGrave.length) {
+                const newGraveCards = pDrawRes.g.slice(localPlayerGrave.length);
+                setLocalPlayerGrave(prev => [...prev, ...newGraveCards]);
+            }
+
+            setLocalPlayerField(prev => prev.map(c => ({ ...c, hasAttacked: false })));
+            setLocalIsPlayerTurn(true);
+
+            // プレイヤーのターン開始時効果
+            currentPlayerField.forEach(c => { if (c.trigger === "turn_start") executeSkillLocal(c, true); });
+
         }, 1200);
     };
 

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, setDoc, doc, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import DeckBuilder from './DeckBuilder';
 
 const requiresTargetCardName = ["search_card_to_hand", "recruit_card_to_field", "generate_card_to_hand", "discard_specific"];
 
@@ -14,7 +15,7 @@ function DevDashboard({ onBack }) {
   const [costType, setCostType] = useState("mana");
   const [power, setPower] = useState(0);
   const [hp, setHp] = useState(0);
-  const [trigger, setTrigger] = useState("none"); 
+  const [trigger, setTrigger] = useState("none");
   const [effectType, setEffectType] = useState("none");
   const [effectValue, setEffectValue] = useState(0);
   const [effectTargetName, setEffectTargetName] = useState("");
@@ -44,7 +45,7 @@ function DevDashboard({ onBack }) {
 
     // ドキュメントIDとして使用するため、カード名を変数に格納
     const cardId = cardName.trim();
-    
+
     const cardData = {
       name: cardName.trim(),
       cardType,
@@ -65,9 +66,9 @@ function DevDashboard({ onBack }) {
       // 変更前: await addDoc(collection(db, "cards"), cardData);
       // 変更後: doc()でドキュメントパスとIDを明確に指定し、setDocで上書き保存する
       await setDoc(doc(db, "cards", cardId), cardData);
-      
+
       alert(`カード「${cardName}」の登録・更新に成功しました`);
-      
+
       setCardName("");
       setEffectText("");
       setEffectTargetName("");
@@ -90,6 +91,16 @@ function DevDashboard({ onBack }) {
     }
   };
 
+  if (activeTab === 'npc_deck') {
+    return (
+      <DeckBuilder
+        userId="NPC"
+        slotId="NPC"
+        onBack={() => setActiveTab('register')}
+      />
+    );
+  }
+  
   return (
     <div style={{ height: '100vh', overflowY: 'auto', padding: '30px', color: 'white', maxWidth: '800px', margin: '0 auto' }}>
       <h2 style={{ color: '#f1c40f', marginBottom: '25px', borderBottom: '3px solid #f1c40f', display: 'inline-block', paddingBottom: '5px' }}>
@@ -103,11 +114,14 @@ function DevDashboard({ onBack }) {
         <button onClick={() => { setActiveTab('list'); fetchCards(); }} style={{ padding: '12px 24px', background: activeTab === 'list' ? '#3498db' : '#2c3e50', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
           📋 登録済み一覧 ({cardList.length}枚)
         </button>
+        <button onClick={() => setActiveTab('npc_deck')} style={{ padding: '12px 24px', background: activeTab === 'npc_deck' ? '#e74c3c' : '#2c3e50', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}>
+          🤖 NPCデッキ
+        </button>
       </div>
 
       {activeTab === 'register' && (
         <form onSubmit={handleRegister} style={{ background: '#2c3e50', padding: '25px', borderRadius: '8px', border: '2px solid #34495e', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', textAlign: 'left' }}>
-          
+
           <div>
             <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>カード名（重複時は上書き）</label>
             <input type="text" value={cardName} onChange={(e) => setCardName(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '4px', border: 'none', background: '#1a252f', color: 'white', boxSizing: 'border-box' }} />
@@ -239,7 +253,7 @@ function DevDashboard({ onBack }) {
                     <div style={{ fontWeight: 'bold', fontSize: '1.2rem', color: '#fff' }}>{card.name}</div>
                     <div style={{ fontSize: '0.85rem', color: '#bdc3c7', marginTop: '6px' }}>
                       <span style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 6px', borderRadius: '3px', marginRight: '8px' }}>{card.cardType.toUpperCase()}</span>
-                      コスト: {card.cost || 0} ({card.costType === 'hp' ? 'HP' : 'マナ'}) 
+                      コスト: {card.cost || 0} ({card.costType === 'hp' ? 'HP' : 'マナ'})
                       {card.cardType === 'character' && ` | ⚔️${card.power} / 💖${card.hp}`}
                     </div>
                     {card.effectText && <div style={{ fontSize: '0.9rem', color: '#f1c40f', marginTop: '6px', fontStyle: 'italic' }}>効果: {card.effectText}</div>}
