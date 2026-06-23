@@ -4,7 +4,13 @@ import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/fire
 import { db } from '../firebase';
 
 const MANA_CARD = { name: "マナ結晶", cardType: "mana", effectText: "コスト用", image: "img/mana.png", isMana: true };
-const TARGETED_EFFECTS = ["damage_single_enemy", "destroy_single_enemy", "buff_single_ally"];
+const TARGETED_EFFECTS = [
+    "damage_single_enemy", 
+    "destroy_single_enemy", 
+    "buff_single_ally",
+    "buff_power_single_ally", // 追加: 単体の攻撃力アップ
+    "buff_hp_single_ally"     // 追加: 単体の体力アップ
+];
 
 const processDraw = (drawCount, currentDeck, currentHand, currentGrave, currentLife) => {
     let d = [...currentDeck];
@@ -27,11 +33,13 @@ const processDraw = (drawCount, currentDeck, currentHand, currentGrave, currentL
             }).sort(() => Math.random() - 0.5);
             g = g.filter(c => c.isMana);
         }
-    }
-    if (d.length > 0) {
-        const drawnCard = d.shift();
-        if (h.length < 10) h.push(drawnCard);
-        else if (!drawnCard.isMana) g.push(drawnCard);
+
+        // 🌟 修正：「カードを引く処理」を for ループの【中】に入れました！
+        if (d.length > 0) {
+            const drawnCard = d.shift();
+            if (h.length < 10) h.push(drawnCard);
+            else if (!drawnCard.isMana) g.push(drawnCard);
+        }
     }
     return { d, h, g, life };
 };
@@ -298,10 +306,37 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 triggerPopup(`相手に${val}ダメージ`);
                 break;
             }
-            case "buff_all_allies": {
+            // 🌟 以下の4つのケースを追加
+            case "buff_power_all_allies": {
                 let field = [...getVal(`${mPath}.field`, isPlayerContext ? playerField : enemyField)];
-                updates[`${mPath}.field`] = field.map(c => ({ ...c, power: (c.power || 0) + val, hp: (c.hp || 0) + val }));
-                triggerPopup(`味方全体を強化`);
+                updates[`${mPath}.field`] = field.map(c => ({ ...c, power: (c.power || 0) + val }));
+                triggerPopup(`味方全体の攻撃力を強化`);
+                break;
+            }
+            case "buff_hp_all_allies": {
+                let field = [...getVal(`${mPath}.field`, isPlayerContext ? playerField : enemyField)];
+                updates[`${mPath}.field`] = field.map(c => ({ ...c, hp: (c.hp || 0) + val }));
+                triggerPopup(`味方全体の体力を強化`);
+                break;
+            }
+            case "buff_power_single_ally": {
+                let field = [...getVal(`${mPath}.field`, isPlayerContext ? playerField : enemyField)];
+                if (field.length > 0) {
+                    const idx = Math.floor(Math.random() * field.length);
+                    triggerPopup(isPlayerContext ? `[${card.name}]の効果！味方の[${field[idx].name}]の攻撃力を強化` : `相手が[${field[idx].name}]の攻撃力を強化！`);
+                    field[idx].power += val;
+                    updates[`${mPath}.field`] = field;
+                }
+                break;
+            }
+            case "buff_hp_single_ally": {
+                let field = [...getVal(`${mPath}.field`, isPlayerContext ? playerField : enemyField)];
+                if (field.length > 0) {
+                    const idx = Math.floor(Math.random() * field.length);
+                    triggerPopup(isPlayerContext ? `[${card.name}]の効果！味方の[${field[idx].name}]の体力を強化` : `相手が[${field[idx].name}]の体力を強化！`);
+                    field[idx].hp += val;
+                    updates[`${mPath}.field`] = field;
+                }
                 break;
             }
             case "increase_max_hp": {
@@ -473,12 +508,12 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         const pGoldCount = localPlayerHand.filter(c => c?.name === "金塊").length;
         const eGoldCount = localEnemyHand.filter(c => c?.name === "金塊").length;
 
-        if (pGoldCount >= 6 || eGoldCount >= 6 || localEnemyLife <= 0 || localPlayerLife <= 0) {
+        if (pGoldCount >= 5 || eGoldCount >= 5 || localEnemyLife <= 0 || localPlayerLife <= 0) {
             setTimeout(() => {
-                if (pGoldCount >= 6) {
+                if (pGoldCount >= 5) {
                     setLocalGameState('win');
-                    triggerPopup("特殊勝利：金塊を6枚集めた！");
-                } else if (eGoldCount >= 6) {
+                    triggerPopup("特殊勝利：金塊を5枚集めた！");
+                } else if (eGoldCount >= 5) {
                     setLocalGameState('lose');
                     triggerPopup("特殊敗北：相手が金塊を集めきった…");
                 } else if (localEnemyLife <= 0) {
@@ -637,14 +672,26 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 setLocalEnemyField(currentEnemyField);
             }
 
-        } else if (card.effectType.includes("ally") && !isEnemyTarget) {
+        }else if (card.effectType.includes("ally") && !isEnemyTarget) {
             let target = { ...currentPlayerField[targetIdx] };
+            const val = card.effectValue || 0; // 🌟 共通変数として出しておく
+
             if (card.effectType === "buff_single_ally") {
-                const val = card.effectValue || 0;
                 target.power += val;
                 target.hp += val;
-                triggerPopup(`[${target.name}]を強化`);
+                triggerPopup(`[${target.name}]を総合強化`);
+            } 
+            // 🌟 追加: 攻撃力のみアップ
+            else if (card.effectType === "buff_power_single_ally") {
+                target.power += val;
+                triggerPopup(`[${target.name}]の攻撃力を強化`);
+            } 
+            // 🌟 追加: 体力のみアップ
+            else if (card.effectType === "buff_hp_single_ally") {
+                target.hp += val;
+                triggerPopup(`[${target.name}]の体力を強化`);
             }
+
             currentPlayerField[targetIdx] = target;
 
             if (isPvP) extraUpdates[`${myPath}.field`] = currentPlayerField;

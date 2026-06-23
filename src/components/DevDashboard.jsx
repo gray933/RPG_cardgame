@@ -181,7 +181,6 @@ function DevDashboard({ onBack }) {
               <option value="none">効果なし</option>
               <option value="damage_single_enemy">damage_single_enemy (敵1体にダメージ/要対象)</option>
               <option value="destroy_single_enemy">destroy_single_enemy (敵1体を破壊/要対象)</option>
-              <option value="buff_single_ally">buff_single_ally (味方1体を強化/要対象)</option>
               <option value="gain_mana">gain_mana (マナ結晶を手札に生成)</option>
               <option value="heal_player">heal_player (自分のライフ回復)</option>
               <option value="damage_enemy_player">damage_enemy_player (相手ライフへ直撃)</option>
@@ -195,6 +194,10 @@ function DevDashboard({ onBack }) {
               <option value="discard_all_hand">discard_all_hand (手札を全廃棄)</option>
               <option value="discard_random">discard_random (相手の手札をランダムハンデス)</option>
               <option value="discard_specific">discard_specific (指定した名前のカードを手札から捨てる)</option>
+              <option value="buff_power_single_ally">buff_power_single_ally (味方1体の攻撃力のみ強化/要対象)</option>
+              <option value="buff_hp_single_ally">buff_hp_single_ally (味方1体の体力のみ強化/要対象)</option>
+              <option value="buff_power_all_allies">buff_power_all_allies (味方全体の攻撃力のみ強化)</option>
+              <option value="buff_hp_all_allies">buff_hp_all_allies (味方全体の体力のみ強化)</option>
             </select>
           </div>
 
