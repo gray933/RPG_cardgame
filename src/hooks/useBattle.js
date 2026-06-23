@@ -330,13 +330,26 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 let deck = [...getVal(`${mPath}.deck`, isPlayerContext ? playerDeck : enemyDeck)];
                 let field = [...getVal(`${mPath}.field`, isPlayerContext ? playerField : enemyField)];
                 const matchIdx = deck.findIndex(c => c.name === targetName);
+                
+                // フィールドの空きが4枠未満（つまり出せる空きがある）なら召喚
                 if (matchIdx !== -1 && field.length < 4) {
                     field.push({
                         ...deck[matchIdx],
-                        hasAttacked: true,
+                        hasAttacked: true, // 召喚酔い
                         originalHp: deck[matchIdx].originalHp ?? deck[matchIdx].hp,
                         originalPower: deck[matchIdx].originalPower ?? deck[matchIdx].power
                     });
+                    
+                    // デッキから対象カードを抜いてシャッフル
+                    deck = deck.filter((_, idx) => idx !== matchIdx).sort(() => Math.random() - 0.5);
+                    
+                    updates[`${mPath}.deck`] = deck;
+                    updates[`${mPath}.field`] = field;
+                    triggerPopup(isPlayerContext ? `デッキから[${targetName}]をフィールドに召喚` : `相手がデッキから[${targetName}]をフィールドに召喚`);
+                } else if (matchIdx === -1) {
+                    if (isPlayerContext) triggerPopup(`対象のカードがデッキにありません`);
+                } else {
+                    if (isPlayerContext) triggerPopup(`フィールドが満杯で召喚できません`);
                 }
                 break;
             }
