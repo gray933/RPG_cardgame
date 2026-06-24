@@ -15,7 +15,21 @@ const SE_MAP = {
   "敗北": "se_defeat.mp3",
   "強化": "se_buff.mp3",
 };
+export let currentSeVolume = localStorage.getItem('seVolume') !== null ? parseFloat(localStorage.getItem('seVolume')) : 0.5;
+export let currentBgmVolume = localStorage.getItem('bgmVolume') !== null ? parseFloat(localStorage.getItem('bgmVolume')) : 0.3;
 
+export const setSeVolume = (vol) => {
+  currentSeVolume = vol;
+  localStorage.setItem('seVolume', vol);
+};
+
+export const setBgmVolume = (vol) => {
+  currentBgmVolume = vol;
+  localStorage.setItem('bgmVolume', vol);
+  if (bgmManager.currentBgm) {
+    bgmManager.currentBgm.volume = currentBgmVolume;
+  }
+};
 // 🔊 2. SEを鳴らす関数
 export const playSE = (actionName) => {
   // 対応表からファイル名を探す
@@ -29,20 +43,23 @@ export const playSE = (actionName) => {
 
   // ファイル名が見つかったら音を鳴らす
   const audio = new Audio(`/audio/${fileName}`);
-  audio.volume = 0.5; // 音量（0.0 〜 1.0）
+  audio.volume = currentSeVolume;
   audio.play().catch(error => console.warn("SE再生ブロック:", error));
 };
 
-// BGM（ループ再生）を管理するクラス
 // BGM（ループ再生）を管理するクラス
 export const bgmManager = {
   currentBgm: null,
   currentFileName: null, // 🌟 追加：現在鳴っている曲の名前を記録する
 
   play: (fileName) => {
-    // 🌟 追加：今鳴らそうとしている曲が、すでに鳴っている曲と同じなら何もしない！
+    // 🌟 修正ポイント：同じ曲が指定された場合の処理を賢くする！
     if (bgmManager.currentFileName === fileName && bgmManager.currentBgm) {
-      return; 
+      // もしブラウザのブロック等で「実際には止まっている（paused）」なら、もう一度再生を試みる
+      if (bgmManager.currentBgm.paused) {
+        bgmManager.currentBgm.play().catch(error => console.warn("BGM再生ブロック:", error));
+      }
+      return; // ちゃんと鳴っているなら何もしないで終了
     }
 
     // 既に別のBGMが鳴っていれば止める
@@ -51,9 +68,9 @@ export const bgmManager = {
     }
     
     bgmManager.currentBgm = new Audio(`/audio/${fileName}`);
-    bgmManager.currentFileName = fileName; // 🌟 記録を更新
+    bgmManager.currentFileName = fileName;
     bgmManager.currentBgm.loop = true;
-    bgmManager.currentBgm.volume = 0.3;
+    bgmManager.currentBgm.volume = currentBgmVolume; // 設定された音量を使用
     
     bgmManager.currentBgm.play().catch(error => {
       console.warn("BGM再生ブロック（ユーザーの操作が必要です）:", error);

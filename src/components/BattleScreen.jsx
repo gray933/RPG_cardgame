@@ -3,6 +3,7 @@ import Card from './Card';
 import { useBattle } from '../hooks/useBattle';
 import { doc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore'; // 🌟 追加
 import { db } from '../firebase';                    // 🌟 追加
+import { SoundButton } from './SoundButton';
 
 // 引数に isPvP, roomId, myRole を追加
 function BattleScreen({ playerDeckData, enemyDeckData, onBack, isPvP = false, roomId = '', myRole = 'host' }) {
@@ -196,13 +197,13 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack, isPvP = false, ro
 
           {gameState === 'lose' && <h1 style={{ fontSize: '5rem', color: '#e74c3c', textShadow: '0 0 20px #c0392b' }}>YOU LOSE...</h1>}
 
-          <button 
+          <SoundButton 
             className="pc-menu-btn" 
             style={{ background: '#3498db', fontSize: '1.5rem', padding: '15px 40px', marginTop: '20px' }} 
             onClick={cleanUpAndGoBack}
           >
             メニューに戻る
-          </button>
+          </SoundButton>
         </div>
       )}
 
@@ -274,13 +275,13 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack, isPvP = false, ro
           <button className="pc-menu-btn" style={{ background: isPlayerTurn ? '#f39c12' : '#7f8c8d', color: 'white', fontSize: '1.2rem', padding: '15px 0', width: '100%', fontWeight: 'bold', border: 'none', borderRadius: '6px', cursor: isPlayerTurn && !pendingTarget ? 'pointer' : 'not-allowed', boxShadow: '0 3px 6px rgba(0,0,0,0.3)' }} onClick={endPlayerTurn} disabled={!isPlayerTurn || pendingTarget}>
             {isPlayerTurn ? "ターン終了" : "相手のターン"}
           </button>
-          <button
+          <SoundButton
             className="pc-menu-btn"
             style={{ background: '#c0392b', color: 'white', fontSize: '1rem', padding: '10px 0', width: '100%', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'background 0.2s' }}
             onClick={cleanUpAndGoBack}
           >
             🏳️ 降参する
-          </button>
+          </SoundButton>
         </div>
       </div>
     </div>

@@ -8,7 +8,9 @@ import BattleScreen from './components/BattleScreen';
 import DevDashboard from './components/DevDashboard';
 import MatchingScreen from './components/MatchingScreen';
 import './App.css';
-import { playSE,bgmManager } from './utils/audioManager';
+import { bgmManager } from './utils/audioManager';
+import { SoundButton } from './components/SoundButton';
+import SettingsScreen from './components/SettingsScreen';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -37,9 +39,24 @@ function App() {
           // メインBGMを流す（同じ曲が流れていれば bgmManager が自動でスルーしてくれます）
           bgmManager.play('maou_bgm_fantasy10.mp3');
       }
-
-      // ❌ ここにあった return () => { bgmManager.stop(); }; は削除します！
       
+  }, [currentScreen]);
+  useEffect(() => {
+    const unlockAudio = () => {
+      // バトル画面以外なら、クリックされた瞬間にBGMを鳴らす
+      if (currentScreen !== 'battle') {
+        bgmManager.play('maou_bgm_fantasy10.mp3');
+      }
+      // 一度クリックされて音が鳴ったら、この監視カメラは消去する
+      document.removeEventListener('click', unlockAudio);
+    };
+
+    // 「画面のどこかをクリックした時」に unlockAudio を実行するようにセット
+    document.addEventListener('click', unlockAudio);
+
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+    };
   }, [currentScreen]);
   // ログイン状態＆プロフィール監視
   useEffect(() => {
@@ -156,13 +173,13 @@ function App() {
         <h1 style={{ fontSize: '3.5rem', color: '#f1c40f', textShadow: '0 0 10px rgba(241,196,15,0.3)', marginBottom: '10px' }}>RPG CARD GAME</h1>
         <div style={{ background: '#2c3e50', padding: '40px', borderRadius: '12px', border: '2px solid #34495e', maxWidth: '400px', width: '100%' }}>
           <p style={{ marginBottom: '25px', fontSize: '1.1rem' }}>ゲームをプレイするには<br />Googleアカウントでの認証が必要です。</p>
-          <button
+          <SoundButton
             className="pc-menu-btn"
             style={{ background: '#dd4b39', color: 'white', fontSize: '1.2rem', padding: '15px 0', width: '100%', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
             onClick={handleLogin}
           >
             🔴 Googleアカウントでログイン
-          </button>
+          </SoundButton>
         </div>
       </div>
     );
@@ -184,13 +201,13 @@ function App() {
           style={{ padding: '15px', fontSize: '1.5rem', borderRadius: '8px', border: '2px solid #34495e', background: '#2c3e50', color: 'white', textAlign: 'center', marginBottom: '30px' }}
         />
         <br />
-        <button
+        <SoundButton
           className="pc-menu-btn"
           style={{ background: '#2ecc71', fontSize: '1.2rem', padding: '15px 40px' }}
           onClick={handleSetNickname}
         >
           決定してスタート！
-        </button>
+        </SoundButton>
       </div>
     );
   }
@@ -200,21 +217,21 @@ function App() {
 
       <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', alignItems: 'center', gap: '15px', zIndex: 90, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', border: '1px solid #485460' }}>
         <span style={{ color: '#d2dae2', fontSize: '0.9rem' }}>👤 {userProfile.nickname}</span>
-        <button
+        <SoundButton
           onClick={handleLogout}
           style={{ padding: '3px 10px', background: '#c0392b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '0.8rem' }}
         >
           ログアウト
-        </button>
+        </SoundButton>
       </div>
 
       {currentScreen === 'title' && (
         <div id="title-screen" style={{ textAlign: 'center', padding: '120px 20px' }}>
           <h1 style={{ color: '#f1c40f', fontSize: '4rem', margin: '0 0 20px 0', letterSpacing: '4px' }}>RPG CARD GAME</h1>
           <p style={{ color: '#7f8c8d', fontSize: '1.2rem', marginBottom: '60px' }}>PRESS THE BUTTON TO START</p>
-          <button className="pc-menu-btn" style={{ padding: '20px 60px', fontSize: '1.5rem', background: '#e67e22' }} onClick={() => setCurrentScreen('home')}>
+          <SoundButton className="pc-menu-btn" style={{ padding: '20px 60px', fontSize: '1.5rem', background: '#e67e22' }} onClick={() => setCurrentScreen('home')}>
             ゲームを始める
-          </button>
+          </SoundButton>
         </div>
       )}
 
@@ -222,11 +239,20 @@ function App() {
         <div id="home-screen" style={{ textAlign: 'center', padding: '80px 20px' }}>
           <h2 style={{ color: 'white', fontSize: '2.5rem', marginBottom: '50px', borderBottom: '3px solid #3498db', display: 'inline-block', paddingBottom: '10px' }}>MAIN MENU</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '25px', maxWidth: '350px', margin: '0 auto' }}>
-            <button className="pc-menu-btn" style={{ padding: '20px', fontSize: '1.4rem', background: '#9b59b6', boxShadow: '0 5px 15px rgba(155,89,182,0.4)' }} onClick={() => { setSelectPurpose('pvp'); setCurrentScreen('deck_select'); }}>🌐 オンライン対人戦 (PvP)</button>
-            <button className="pc-menu-btn" style={{ padding: '20px', fontSize: '1.4rem', background: '#3498db' }} onClick={() => { setSelectPurpose('battle'); setCurrentScreen('deck_select'); }}>⚔️ VS コンピューター (AI)</button>
-            <button className="pc-menu-btn" style={{ padding: '20px', background: '#2ecc71' }} onClick={() => { setSelectPurpose('edit'); setCurrentScreen('deck_select'); }}>🛠 デッキを構築する</button>
+            <SoundButton className="pc-menu-btn" style={{ padding: '20px', fontSize: '1.4rem', background: '#9b59b6', boxShadow: '0 5px 15px rgba(155,89,182,0.4)' }} onClick={() => { setSelectPurpose('pvp'); setCurrentScreen('deck_select'); }}>
+              🌐 オンライン対人戦 (PvP)
+            </SoundButton>
+            <SoundButton className="pc-menu-btn" style={{ padding: '20px', fontSize: '1.4rem', background: '#3498db' }} onClick={() => { setSelectPurpose('battle'); setCurrentScreen('deck_select'); }}>
+              ⚔️ VS コンピューター (AI)
+            </SoundButton>
+            <SoundButton className="pc-menu-btn" style={{ padding: '20px', background: '#2ecc71' }} onClick={() => { setSelectPurpose('edit'); setCurrentScreen('deck_select'); }}>
+              🛠 デッキを構築する
+            </SoundButton>
+            <SoundButton className="pc-menu-btn" style={{ padding: '20px', background: '#34495e' }} onClick={() => setCurrentScreen('settings')}>⚙️ 設定（音量調整）</SoundButton>
             {import.meta.env.VITE_SHOW_DEV === "true" && (
-              <button className="pc-menu-btn" style={{ padding: '15px', background: '#e74c3c', marginTop: '30px' }} onClick={() => setCurrentScreen('dev_dashboard')}>⚙️ 開発者ツール（カード図鑑）</button>
+              <SoundButton className="pc-menu-btn" style={{ padding: '15px', background: '#e74c3c', marginTop: '30px' }} onClick={() => setCurrentScreen('dev_dashboard')}>
+                ⚙️ 開発者ツール（カード図鑑）
+              </SoundButton>
             )}
           </div>
         </div>
@@ -239,17 +265,19 @@ function App() {
           {!isLoaded && <h3 style={{ color: '#f1c40f' }}>📥 デッキデータをロード中...</h3>}
           <div style={{ display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: '20px', margin: '40px auto', maxWidth: '800px' }}>
             {[1, 2, 3, 4, 5].map(num => (
-              <button
+              <SoundButton
                 key={num}
                 className="pc-menu-btn"
                 style={{ width: '130px', padding: '25px 0', background: '#34495e', fontSize: '1.2rem', boxShadow: '0 4px 6px rgba(0,0,0,0.2)' }}
                 onClick={() => handleSlotSelect(num)}
               >
                 🃏 デッキ {num}
-              </button>
+              </SoundButton>
             ))}
           </div>
-          <button className="pc-menu-btn" style={{ background: '#7f8c8d', marginTop: '20px' }} onClick={() => setCurrentScreen('home')}>戻る</button>
+          <SoundButton className="pc-menu-btn" style={{ background: '#7f8c8d', marginTop: '20px' }} onClick={() => setCurrentScreen('home')}>
+            戻る
+          </SoundButton>
         </div>
       )}
 
@@ -284,6 +312,11 @@ function App() {
           myRole={pvpRole}
         />
       )}
+      
+      {currentScreen === 'settings' && (
+        <SettingsScreen onBack={() => setCurrentScreen('home')} />
+      )}
+
       {currentScreen === 'dev_dashboard' && import.meta.env.VITE_SHOW_DEV === "true" && (
         <DevDashboard onBack={() => setCurrentScreen('home')} />
       )}
