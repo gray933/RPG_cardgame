@@ -8,6 +8,7 @@ import BattleScreen from './components/BattleScreen';
 import DevDashboard from './components/DevDashboard';
 import MatchingScreen from './components/MatchingScreen';
 import './App.css';
+import { playSE,bgmManager } from './utils/audioManager';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -24,6 +25,22 @@ function App() {
   const [pvpRoomId, setPvpRoomId] = useState('');
   const [pvpRole, setPvpRole] = useState('');
 
+  // 🎵 BGMの管理：画面が切り替わるたびにチェックする
+  useEffect(() => {
+      // 画面が「battle（バトル画面）」の時
+      if (currentScreen === 'battle') {
+          // メイン画面のBGMを止める
+          bgmManager.stop();
+      } 
+      // それ以外の画面（title, home, deck_select, deck など）の時
+      else {
+          // メインBGMを流す（同じ曲が流れていれば bgmManager が自動でスルーしてくれます）
+          bgmManager.play('maou_bgm_fantasy10.mp3');
+      }
+
+      // ❌ ここにあった return () => { bgmManager.stop(); }; は削除します！
+      
+  }, [currentScreen]);
   // ログイン状態＆プロフィール監視
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
