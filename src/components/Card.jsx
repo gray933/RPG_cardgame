@@ -7,6 +7,8 @@ export default function Card({ cardData, statusText, isEnemy, onDragStart, onDou
   const timer = useRef(null);
   const origin = useRef(null);
   const held = useRef(false);
+  const pointerType = useRef('mouse');
+  const [mouseInput, setMouseInput] = useState(true);
   const id = useId();
   const cancel = () => clearTimeout(timer.current);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -31,27 +33,41 @@ export default function Card({ cardData, statusText, isEnemy, onDragStart, onDou
   return <>
     <div className={`game-card ${isMana ? 'game-card--mana' : cardData.cardType === 'magic' ? 'game-card--magic' : ''}`}
       tabIndex={0} aria-label={cardData.name} aria-describedby={preview ? id : undefined}
-      draggable={Boolean(onDragStart) && !isEnemy && !isMana}
-      onPointerEnter={e => { if (e.pointerType === 'mouse') show(e.currentTarget); }}
-      onPointerLeave={() => { cancel(); setPreview(null); }}
+      draggable={mouseInput && Boolean(onDragStart) && !isEnemy && !isMana}
+      onPointerEnter={e => {
+        if (e.pointerType === 'mouse') { setMouseInput(true); show(e.currentTarget); }
+      }}
+      onPointerLeave={e => {
+        if (e.pointerType === 'mouse') { cancel(); setPreview(null); }
+      }}
       onFocus={e => { if (e.currentTarget.matches(':focus-visible')) show(e.currentTarget); }}
       onBlur={() => setPreview(null)}
       onPointerDown={e => {
+        pointerType.current = e.pointerType;
+        setMouseInput(e.pointerType === 'mouse');
         held.current = false;
         if (e.pointerType === 'mouse') return;
         cancel(); origin.current = { x: e.clientX, y: e.clientY };
         const element = e.currentTarget;
+        // Touch long-press belongs to inspection, never native HTML dragging.
+        element.draggable = false;
+        element.setPointerCapture(e.pointerId);
         timer.current = setTimeout(() => { held.current = true; show(element); }, 450);
       }}
       onPointerMove={e => {
-        if (origin.current && Math.hypot(e.clientX - origin.current.x, e.clientY - origin.current.y) > 10) { cancel(); setPreview(null); }
+        if (!held.current && origin.current && Math.hypot(e.clientX - origin.current.x, e.clientY - origin.current.y) > 10) {
+          cancel(); origin.current = null; held.current = true;
+        }
       }}
       onPointerUp={e => { cancel(); origin.current = null; if (e.pointerType !== 'mouse') setPreview(null); }}
       onPointerCancel={() => { cancel(); origin.current = null; setPreview(null); }}
       onContextMenu={e => e.preventDefault()}
       onClick={e => { if (held.current) { e.preventDefault(); e.stopPropagation(); return; } onClick?.(e); }}
       onDoubleClick={e => { if (!held.current) onDoubleClick?.(e); }}
-      onDragStart={e => { cancel(); setPreview(null); onDragStart?.(e); }}>
+      onDragStart={e => {
+        if (pointerType.current !== 'mouse' || held.current) { e.preventDefault(); return; }
+        cancel(); setPreview(null); onDragStart?.(e);
+      }}>
       {!isMana && <span className="game-card__cost">{cardData.cost ?? 1}</span>}
       {statusText && <span className="game-card__status">{statusText}</span>}
       <span className="game-card__name">{cardData.name}</span>
