@@ -42,21 +42,27 @@ function App() {
       }
       
   }, [currentScreen]);
+
   useEffect(() => {
-    const unlockAudio = () => {
-      // バトル画面以外なら、クリックされた瞬間にBGMを鳴らす
-      if (currentScreen !== 'battle') {
-        bgmManager.play('maou_bgm_fantasy10.mp3');
-      }
-      // 一度クリックされて音が鳴ったら、この監視カメラは消去する
-      document.removeEventListener('click', unlockAudio);
+    const resumeBgm = () => {
+      const fileName = currentScreen === 'battle'
+        ? 'maou_bgm_fantasy11.mp3'
+        : 'maou_bgm_fantasy10.mp3';
+      bgmManager.play(fileName);
     };
 
-    // 「画面のどこかをクリックした時」に unlockAudio を実行するようにセット
-    document.addEventListener('click', unlockAudio);
+    // 自動再生がブロックされた場合や、バックグラウンド復帰後に再開する。
+    // 初回だけで監視を外すと、再生失敗後に復帰できないため常時監視する。
+    const handleVisibilityChange = () => {
+      if (!document.hidden) resumeBgm();
+    };
+
+    document.addEventListener('pointerdown', resumeBgm);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('pointerdown', resumeBgm);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [currentScreen]);
   // ログイン状態＆プロフィール監視

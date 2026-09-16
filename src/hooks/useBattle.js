@@ -2,7 +2,7 @@
 import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import { playSE,bgmManager } from '../utils/audioManager';
+import { playSE } from '../utils/audioManager';
 
 const MANA_CARD = { name: "マナ結晶", cardType: "mana", effectText: "コスト用", image: "img/mana.png", isMana: true };
 const TARGETED_EFFECTS = [
@@ -120,15 +120,6 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
     const gameState = useRemote
         ? (roomData.status === 'finished' ? (roomData.winner === myRole ? 'win' : 'lose') : 'playing')
         : localGameState;
-    useEffect(() => {
-    // ※もし自動再生がブロックされる場合は、初回クリック時に鳴らすなどの工夫が必要です
-    bgmManager.play('maou_bgm_fantasy11.mp3');
-
-    // コンポーネントがアンマウント（バトル終了・画面移動）されたらBGMを止める
-    return () => {
-      bgmManager.stop();
-    };
-  }, []);
     // 🤖 【CPU専用】効果処理
     const executeSkillLocal = async (card, isPlayerContext) => {
         if (!card.effectType || card.effectType === "none") return;

@@ -53,14 +53,24 @@ export const bgmManager = {
   currentBgm: null,
   currentFileName: null, // 🌟 追加：現在鳴っている曲の名前を記録する
 
+  resume: () => {
+    if (!bgmManager.currentBgm || !bgmManager.currentBgm.paused) {
+      return Promise.resolve();
+    }
+
+    return bgmManager.currentBgm.play().catch(error => {
+      console.warn("BGM再生ブロック（ユーザーの操作が必要です）:", error);
+    });
+  },
+
   play: (fileName) => {
     // 🌟 修正ポイント：同じ曲が指定された場合の処理を賢くする！
     if (bgmManager.currentFileName === fileName && bgmManager.currentBgm) {
       // もしブラウザのブロック等で「実際には止まっている（paused）」なら、もう一度再生を試みる
       if (bgmManager.currentBgm.paused) {
-        bgmManager.currentBgm.play().catch(error => console.warn("BGM再生ブロック:", error));
+        return bgmManager.resume();
       }
-      return; // ちゃんと鳴っているなら何もしないで終了
+      return Promise.resolve(); // ちゃんと鳴っているなら何もしないで終了
     }
 
     // 既に別のBGMが鳴っていれば止める
@@ -70,12 +80,11 @@ export const bgmManager = {
     
     bgmManager.currentBgm = new Audio(`/audio/${fileName}`);
     bgmManager.currentFileName = fileName;
+    bgmManager.currentBgm.preload = 'auto';
     bgmManager.currentBgm.loop = true;
     bgmManager.currentBgm.volume = currentBgmVolume; // 設定された音量を使用
-    
-    bgmManager.currentBgm.play().catch(error => {
-      console.warn("BGM再生ブロック（ユーザーの操作が必要です）:", error);
-    });
+
+    return bgmManager.resume();
   },
 
   stop: () => {
