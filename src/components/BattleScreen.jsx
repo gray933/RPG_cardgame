@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Card from './Card';
+import './BattleScreen.css';
 import { useBattle } from '../hooks/useBattle';
 import { doc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore'; // 🌟 追加
 import { db } from '../firebase';                    // 🌟 追加
@@ -114,7 +115,7 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack, isPvP = false, ro
   }
 
   return (
-    <div id="game-screen" style={{ position: 'relative', width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', background: '#1e272e', overflow: 'hidden' }}>
+    <div id="game-screen" className="battle-screen" style={{ position: 'relative', width: '100%', height: '100vh', display: 'flex', flexDirection: 'column', background: '#1e272e', overflow: 'hidden' }}>
 
       <style>{`
         @keyframes cutInAnim {
@@ -207,83 +208,52 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack, isPvP = false, ro
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 10px', display: 'flex', flexDirection: 'column', gap: '20px', boxSizing: 'border-box' }}>
-        <div id="enemy-area" onClick={handleDirectAttack} style={{ cursor: selectedAttackerIdx !== null ? 'crosshair' : 'default', transition: 'all 0.2s', background: 'rgba(0,0,0,0.15)', padding: '15px', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ color: '#e74c3c', margin: 0, fontSize: '1.2rem' }}>相手 (HP: {enemyLife} / {enemyMaxLife}) {selectedAttackerIdx !== null && "🎯 [クリックでダイレクトアタック！]"}</h2>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div style={{ background: '#34495e', color: 'white', padding: '3px 10px', borderRadius: '10px', fontSize: '0.8rem' }}>手札: {enemyHand.length}/10枚</div>
-              <div style={{ background: '#34495e', color: 'white', padding: '3px 10px', borderRadius: '10px', fontSize: '0.8rem' }}>デッキ: {enemyDeck.length}枚</div>
-              <div onClick={(e) => { e.stopPropagation(); setViewingGrave('enemy'); }} style={{ background: '#7f8c8d', color: 'white', padding: '3px 10px', borderRadius: '10px', fontSize: '0.8rem', cursor: 'pointer' }}>🪦 墓地: {enemyGrave.length}枚</div>
-            </div>
+      <div className="battle-board">
+        <section id="enemy-area" className="battle-side" onClick={handleDirectAttack}>
+          <header className="battle-status">
+            <h2>相手 <span>HP {enemyLife} / {enemyMaxLife}</span></h2>
+            <div><span>手札 {enemyHand.length}/10</span><span>山札 {enemyDeck.length}</span><button onClick={e => { e.stopPropagation(); setViewingGrave('enemy'); }}>墓地 {enemyGrave.length}</button></div>
+          </header>
+          <div className="battle-field">
+            {enemyField.map((card, idx) => <div className="battle-slot" key={idx} onClick={e => { e.stopPropagation(); handleFightMinion(idx); }}>
+              <Card cardData={card} isEnemy statusText={pendingTarget ? '🎯 対象' : '敵軍'} />
+            </div>)}
+            {!enemyField.length && <span className="battle-empty">相手のフィールド</span>}
           </div>
-          <div style={{ width: '100%', overflowX: 'auto', marginTop: '5px' }}>
-            <div style={{ display: 'flex', gap: '5px', width: 'max-content', padding: '15px 5px 5px 5px' }}>
-              {enemyHand.map((_, idx) => <div key={idx} className="card card-back" style={{ transform: 'scale(0.7)', transformOrigin: 'top left' }}></div>)}
-            </div>
+        </section>
+        <div className="battle-turn" aria-live="polite">{pendingTarget ? '🎯 効果の対象を選択' : selectedAttackerIdx !== null ? '攻撃対象を選択・相手のHPを押すと直接攻撃' : isPlayerTurn ? '🔵 あなたのターン' : '⏳ 相手のターン'}</div>
+        <section className="battle-side battle-side--player">
+          <header className="battle-status">
+            <h2>あなた <span>HP {playerLife} / {playerMaxLife}</span></h2>
+            <div><span>山札 {playerDeck.length}</span><button onClick={() => setViewingGrave('player')}>墓地 {playerGrave.length}</button></div>
+          </header>
+          <div id="player-field-area" className="battle-field" onDragOver={e => e.preventDefault()} onDrop={e => {
+            e.preventDefault();
+            const value = e.dataTransfer.getData('handIndex');
+            if (/^\d+$/.test(value)) playCard(Number(value));
+          }}>
+            {playerField.map((card, idx) => <div key={idx} className={`battle-slot ${selectedAttackerIdx === idx ? 'battle-slot--selected' : ''}`} onClick={() => handleSelectAttacker(idx)}>
+              <Card cardData={card} statusText={pendingTarget ? '🎯 対象' : card.hasAttacked ? '行動済み' : selectedAttackerIdx === idx ? '選択中' : '攻撃可能'} />
+            </div>)}
+            {!playerField.length && <span className="battle-empty">手札をタップ、またはここにドラッグ</span>}
           </div>
-          <div style={{ minHeight: '180px', background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', marginTop: '10px' }}>
-            <div style={{ display: 'flex', gap: '10px', paddingTop: '15px', paddingLeft: '10px' }}>
-              {enemyField.map((card, idx) => (
-                <div key={idx} onClick={(e) => { e.stopPropagation(); handleFightMinion(idx); }} style={{ cursor: pendingTarget || selectedAttackerIdx !== null ? 'crosshair' : 'default', boxShadow: pendingTarget && pendingTarget.card.effectType.includes("enemy") ? '0 0 15px #e74c3c' : 'none', borderRadius: '8px' }}>
-                  <Card cardData={card} isEnemy={true} statusText={pendingTarget ? "🎯 対象" : "敵軍"} onDoubleClick={() => setDetailCard(card)} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ textAlign: 'center', color: isPlayerTurn ? '#3498db' : '#e74c3c', margin: '0', fontWeight: 'bold' }}>
-          {isPlayerTurn ? "▼ 🔵 あなたのターンです。 ▼" : "⏳ 🔴 相手の思考中... ⏳"}
-        </div>
-
-        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '15px', borderRadius: '10px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <h2 style={{ color: '#2ecc71', margin: 0, fontSize: '1.2rem' }}>あなた (HP: {playerLife} / {playerMaxLife})</h2>
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <div style={{ background: '#34495e', color: 'white', padding: '3px 10px', borderRadius: '10px', fontSize: '0.8rem' }}>デッキ: {playerDeck.length}枚</div>
-              <div onClick={() => setViewingGrave('player')} style={{ background: '#7f8c8d', color: 'white', padding: '3px 10px', borderRadius: '10px', fontSize: '0.8rem', cursor: 'pointer' }}>🪦 墓地: {playerGrave.length}枚</div>
-            </div>
-          </div>
-          <div id="player-field-area" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { playCard(parseInt(e.dataTransfer.getData("handIndex"))); }} style={{ minHeight: '180px', background: 'rgba(255,255,255,0.05)', padding: '10px', borderRadius: '8px', border: '2px dashed rgba(255,255,255,0.2)' }}>
-            <div style={{ display: 'flex', gap: '10px', paddingTop: '15px', paddingLeft: '10px' }}>
-              {playerField.map((card, idx) => {
-                const isSelected = selectedAttackerIdx === idx;
-                return (
-                  <div key={idx} onClick={() => handleSelectAttacker(idx)} style={{ cursor: pendingTarget || !card.hasAttacked ? 'pointer' : 'not-allowed', opacity: card.hasAttacked && !pendingTarget ? 0.5 : 1, transform: isSelected ? 'scale(1.05)' : 'scale(1)', boxShadow: isSelected ? '0 0 15px #f1c40f' : pendingTarget && pendingTarget.card.effectType.includes("ally") ? '0 0 15px #2ecc71' : 'none', borderRadius: '8px', transition: 'all 0.2s' }}>
-                    <Card cardData={card} statusText={pendingTarget ? "🎯 対象" : card.hasAttacked ? "行動済み" : isSelected ? "👉 選択中" : "攻撃可能"} isEnemy={false} onDoubleClick={() => setDetailCard(card)} />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        </section>
       </div>
-
-      <div style={{ height: '220px', minHeight: '220px', background: '#2c3e50', borderTop: '4px solid #f1c40f', display: 'flex', alignItems: 'center', padding: '10px 20px', gap: '20px', boxSizing: 'border-box', zIndex: 100 }}>
-        <div style={{ flex: 1, overflowX: 'auto', display: 'flex', height: '100%', alignItems: 'center', paddingBottom: '5px' }}>
-          <div style={{ display: 'flex', gap: '10px', paddingTop: '15px', paddingLeft: '10px', paddingRight: '10px', width: 'max-content' }}>
-            {playerHand.map((card, idx) => (
-              <div key={idx} style={{ flexShrink: 0 }}>
-                <Card cardData={card} statusText={pendingTarget && pendingTarget.handIndex === idx ? "❌ 中断" : ""} isEnemy={false} onDragStart={(e) => { if (pendingTarget) return e.preventDefault(); e.dataTransfer.setData("handIndex", idx); }} onDoubleClick={() => setDetailCard(card)} />
-              </div>
-            ))}
-          </div>
+      <footer className="battle-hand-area">
+        <div className="battle-hand-label">手札 {playerHand.length}/10 <span>効果：マウスを重ねる / 長押し</span></div>
+        <div className="battle-hand">
+          {playerHand.map((card, idx) => <div className="battle-slot" key={idx}>
+            <Card cardData={card} statusText={pendingTarget?.handIndex === idx ? '❌ 中断' : ''}
+              onClick={() => playCard(idx)}
+              onDragStart={e => { if (pendingTarget) return e.preventDefault(); e.dataTransfer.setData('handIndex', idx); }} />
+          </div>)}
         </div>
-        <div style={{ width: '200px', minWidth: '200px', display: 'flex', flexDirection: 'column', gap: '12px', paddingLeft: '20px', borderLeft: '3px solid #34495e', boxSizing: 'border-box', justifyContent: 'center' }}>
-          <div style={{ textAlign: 'center', background: '#34495e', color: '#1abc9c', padding: '6px 10px', borderRadius: '5px', fontSize: '0.9rem', fontWeight: 'bold', boxShadow: 'inset 0 0 5px rgba(0,0,0,0.3)' }}>手札: {playerHand.length} / 10 枚</div>
-          <button className="pc-menu-btn" style={{ background: isPlayerTurn ? '#f39c12' : '#7f8c8d', color: 'white', fontSize: '1.2rem', padding: '15px 0', width: '100%', fontWeight: 'bold', border: 'none', borderRadius: '6px', cursor: isPlayerTurn && !pendingTarget ? 'pointer' : 'not-allowed', boxShadow: '0 3px 6px rgba(0,0,0,0.3)' }} onClick={endPlayerTurn} disabled={!isPlayerTurn || pendingTarget}>
-            {isPlayerTurn ? "ターン終了" : "相手のターン"}
-          </button>
-          <SoundButton
-            className="pc-menu-btn"
-            style={{ background: '#c0392b', color: 'white', fontSize: '1rem', padding: '10px 0', width: '100%', border: 'none', borderRadius: '6px', cursor: 'pointer', transition: 'background 0.2s' }}
-            onClick={cleanUpAndGoBack}
-          >
-            🏳️ 降参する
-          </SoundButton>
+        <div className="battle-controls">
+          <span>{isPlayerTurn ? '手札をタップして使用' : '相手の操作を待っています'}</span>
+          <SoundButton className="pc-menu-btn battle-surrender" onClick={cleanUpAndGoBack}>🏳️ 降参</SoundButton>
+          <button className="pc-menu-btn battle-end" onClick={endPlayerTurn} disabled={!isPlayerTurn || Boolean(pendingTarget)}>{isPlayerTurn ? 'ターン終了' : '相手のターン'}</button>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

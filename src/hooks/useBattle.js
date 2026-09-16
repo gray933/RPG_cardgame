@@ -1,5 +1,5 @@
 // src/hooks/useBattle.js
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useEffectEvent, useRef } from 'react';
 import { doc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { playSE,bgmManager } from '../utils/audioManager';
@@ -12,6 +12,18 @@ const TARGETED_EFFECTS = [
     "buff_power_single_ally", // 追加: 単体の攻撃力アップ
     "buff_hp_single_ally"     // 追加: 単体の体力アップ
 ];
+const BATTLE_CONFIG = {
+    INITIAL_LIFE: 20,          // 初期HP
+    MAX_HAND_SIZE: 10,         // 手札の最大枚数
+    MAX_FIELD_SIZE: 4,         // フィールドに出せる最大枚数
+    FATIGUE_DAMAGE: 5,         // 山札切れ時のペナルティダメージ
+    GOLD_WIN_COUNT: 5,         // 特殊勝利に必要な「黄金」の枚数
+    INITIAL_DRAW_PLAYER: 3,    // 先攻の初期手札ドロー数
+    INITIAL_DRAW_ENEMY: 4      // 後攻の初期手札ドロー数
+};
+
+// シャッフル済みのデッキから初期手札を取り出す。デッキ枚数が不足していても安全に動作する。
+const drawInitialHand = (deck, drawCount) => deck.splice(0, drawCount);
 
 const processDraw = (drawCount, currentDeck, currentHand, currentGrave, currentLife) => {
     let d = [...currentDeck];
@@ -23,7 +35,7 @@ const processDraw = (drawCount, currentDeck, currentHand, currentGrave, currentL
         if (d.length === 0) {
             const nonManaGrave = g.filter(c => !c.isMana);
             if (nonManaGrave.length === 0) break;
-            life -= 5;
+            life -= BATTLE_CONFIG.FATIGUE_DAMAGE;
             // 🌟 墓地からデッキに戻る際に、HPと攻撃力を元の状態にリセットする
             d = nonManaGrave.map(c => {
                 let resetCard = { ...c };
@@ -38,18 +50,18 @@ const processDraw = (drawCount, currentDeck, currentHand, currentGrave, currentL
         // 🌟 修正：「カードを引く処理」を for ループの【中】に入れました！
         if (d.length > 0) {
             const drawnCard = d.shift();
-            if (h.length < 10) h.push(drawnCard);
+            if (h.length < BATTLE_CONFIG.MAX_HAND_SIZE) h.push(drawnCard);
             else if (!drawnCard.isMana) g.push(drawnCard);
         }
     }
     return { d, h, g, life };
 };
 
-export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, enemyDeckData, triggerPopup, onBack }) {
-    const [localPlayerMaxLife, setLocalPlayerMaxLife] = useState(20);
-    const [localEnemyMaxLife, setLocalEnemyMaxLife] = useState(20);
-    const [localPlayerLife, setLocalPlayerLife] = useState(20);
-    const [localEnemyLife, setLocalEnemyLife] = useState(20);
+export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, enemyDeckData, triggerPopup }) {
+    const [localPlayerMaxLife, setLocalPlayerMaxLife] = useState(BATTLE_CONFIG.INITIAL_LIFE);
+    const [localEnemyMaxLife, setLocalEnemyMaxLife] = useState(BATTLE_CONFIG.INITIAL_LIFE);
+    const [localPlayerLife, setLocalPlayerLife] = useState(BATTLE_CONFIG.INITIAL_LIFE);
+    const [localEnemyLife, setLocalEnemyLife] = useState(BATTLE_CONFIG.INITIAL_LIFE);
     const [localPlayerDeck, setLocalPlayerDeck] = useState([]);
     const [localPlayerHand, setLocalPlayerHand] = useState([]);
     const [localPlayerField, setLocalPlayerField] = useState([]);
@@ -63,10 +75,27 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
 
     const [selectedAttackerIdx, setSelectedAttackerIdx] = useState(null);
     const [pendingTarget, setPendingTarget] = useState(null);
-    const [pendingPeeping, setPendingPeeping] = useState(false);
+    const [pendingPeeping] = useState(false);
     const [pendingCpuStart, setPendingCpuStart] = useState(false);
+    const localStateRef = useRef(null);
+    const actionInFlight = useRef(false);
+    const performAction = async (action, ...args) => {
+        if (actionInFlight.current) return;
+        actionInFlight.current = true;
+        try { return await action(...args); }
+        finally { actionInFlight.current = false; }
+    };
+    useEffect(() => {
+        localStateRef.current = {
+            localPlayerMaxLife, localEnemyMaxLife, localPlayerLife, localEnemyLife,
+            localPlayerDeck, localPlayerHand, localPlayerField, localPlayerGrave,
+            localEnemyDeck, localEnemyHand, localEnemyField, localEnemyGrave,
+            localGameState,
+        };
+    });
+    useEffect(() => () => { localStateRef.current = null; }, []);
 
-    const useRemote = isPvP && roomData && roomData.players;
+    const useRemote = isPvP && roomData?.players?.host && roomData?.players?.guest;
     const enemyRole = myRole === 'host' ? 'guest' : 'host';
     const myPath = `players.${myRole}`;
     const enemyPath = `players.${enemyRole}`;
@@ -87,7 +116,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
     const enemyField = useRemote ? (enemyData.field || []) : localEnemyField;
     const enemyGrave = useRemote ? (enemyData.graveyard || []) : localEnemyGrave;
 
-    const isPlayerTurn = useRemote ? (roomData.currentTurn === myRole) : localIsPlayerTurn;
+    const isPlayerTurn = isPvP ? Boolean(useRemote && roomData.currentTurn === myRole && roomData.status === 'playing') : localIsPlayerTurn;
     const gameState = useRemote
         ? (roomData.status === 'finished' ? (roomData.winner === myRole ? 'win' : 'lose') : 'playing')
         : localGameState;
@@ -103,21 +132,59 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
     // 🤖 【CPU専用】効果処理
     const executeSkillLocal = async (card, isPlayerContext) => {
         if (!card.effectType || card.effectType === "none") return;
+        if (!localStateRef.current) return;
+        const {
+            localPlayerMaxLife, localEnemyMaxLife, localPlayerDeck, localPlayerHand,
+            localPlayerField, localEnemyDeck, localEnemyHand, localEnemyField,
+            localPlayerGrave, localEnemyGrave, localPlayerLife, localEnemyLife,
+        } = localStateRef.current;
         const val = card.effectValue || 0;
 
         switch (card.effectType) {
+            case 'draw_card': {
+                const result = processDraw(val,
+                    isPlayerContext ? localPlayerDeck : localEnemyDeck,
+                    isPlayerContext ? localPlayerHand : localEnemyHand,
+                    isPlayerContext ? localPlayerGrave : localEnemyGrave,
+                    isPlayerContext ? localPlayerLife : localEnemyLife);
+                if (isPlayerContext) {
+                    setLocalPlayerDeck(result.d); setLocalPlayerHand(result.h);
+                    setLocalPlayerGrave(result.g); setLocalPlayerLife(result.life);
+                } else {
+                    setLocalEnemyDeck(result.d); setLocalEnemyHand(result.h);
+                    setLocalEnemyGrave(result.g); setLocalEnemyLife(result.life);
+                }
+                break;
+            }
+            case 'damage_all_enemies': {
+                const setField = isPlayerContext ? setLocalEnemyField : setLocalPlayerField;
+                setField(f => f.map(c => ({ ...c, hp: c.hp - val })));
+                break;
+            }
+            case 'buff_power_all_allies':
+            case 'buff_hp_all_allies':
+            case 'buff_power_single_ally':
+            case 'buff_hp_single_ally': {
+                const setField = isPlayerContext ? setLocalPlayerField : setLocalEnemyField;
+                const field = isPlayerContext ? localPlayerField : localEnemyField;
+                const idx = Math.floor(Math.random() * field.length);
+                const stat = card.effectType.includes('power') ? 'power' : 'hp';
+                setField(f => f.map((c, i) => card.effectType.includes('all_allies') || i === idx
+                    ? { ...c, [stat]: (c[stat] || 0) + val } : c));
+                break;
+            }
             case "gain_mana":
                 triggerPopup(`マナ結晶を${val}枚獲得`);
                 if (isPlayerContext) {
                     setLocalPlayerHand(curr => {
                         let n = [...curr];
-                        for (let i = 0; i < val; i++) if (n.length < 10) n.push(JSON.parse(JSON.stringify(MANA_CARD)));
+                        for (let i = 0; i < val; i++) if (n.length < BATTLE_CONFIG.MAX_HAND_SIZE) n.push(JSON.parse(JSON.stringify(MANA_CARD)));
                         return n;
                     });
                 } else {
                     setLocalEnemyHand(curr => {
                         let n = [...curr];
-                        for (let i = 0; i < val; i++) if (n.length < 10) n.push(JSON.parse(JSON.stringify(MANA_CARD)));
+                        for (let i = 0; i < val; i++) if (n.length < BATTLE_CONFIG.MAX_HAND_SIZE) n.push(JSON.parse(JSON.stringify(MANA_CARD)));
                         return n;
                     });
                 }
@@ -151,7 +218,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 if (!targetName) break;
                 if (isPlayerContext) {
                     const matchIdx = localPlayerDeck.findIndex(c => c.name === targetName);
-                    if (matchIdx !== -1 && localPlayerHand.length < 10) {
+                    if (matchIdx !== -1 && localPlayerHand.length < BATTLE_CONFIG.MAX_HAND_SIZE) {
                         triggerPopup(`デッキから[${targetName}]を手札に追加`);
                         const foundCard = localPlayerDeck[matchIdx];
                         setLocalPlayerDeck(localPlayerDeck.filter((_, idx) => idx !== matchIdx).sort(() => Math.random() - 0.5));
@@ -160,7 +227,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                     } else { triggerPopup(`対象のカードがデッキにありません`); }
                 } else {
                     const matchIdx = localEnemyDeck.findIndex(c => c.name === targetName);
-                    if (matchIdx !== -1 && localEnemyHand.length < 10) {
+                    if (matchIdx !== -1 && localEnemyHand.length < BATTLE_CONFIG.MAX_HAND_SIZE) {
                         playSE('ドロー'); // 🌟 修正：カードを引く音を再生
                         triggerPopup(`相手がデッキからカードをサーチ`);
                         const foundCard = localEnemyDeck[matchIdx];
@@ -175,7 +242,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 if (!targetName) break;
                 if (isPlayerContext) {
                     const matchIdx = localPlayerDeck.findIndex(c => c.name === targetName);
-                    if (matchIdx !== -1 && localPlayerField.length < 4) {
+                    if (matchIdx !== -1 && localPlayerField.length < BATTLE_CONFIG.MAX_FIELD_SIZE) {
                         triggerPopup(`デッキから[${targetName}]をフィールドに召喚`);
                         const foundCard = localPlayerDeck[matchIdx];
                         setLocalPlayerDeck(localPlayerDeck.filter((_, idx) => idx !== matchIdx).sort(() => Math.random() - 0.5));
@@ -184,7 +251,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                     } else { triggerPopup(`召喚に失敗しました`); }
                 } else {
                     const matchIdx = localEnemyDeck.findIndex(c => c.name === targetName);
-                    if (matchIdx !== -1 && localEnemyField.length < 4) {
+                    if (matchIdx !== -1 && localEnemyField.length < BATTLE_CONFIG.MAX_FIELD_SIZE) {
                         triggerPopup(`相手がデッキから[${targetName}]をフィールドに召喚`);
                         const foundCard = localEnemyDeck[matchIdx];
                         setLocalEnemyDeck(localEnemyDeck.filter((_, idx) => idx !== matchIdx).sort(() => Math.random() - 0.5));
@@ -199,13 +266,13 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 if (!targetName) break;
                 try {
                     const q = query(collection(db, "cards"), where("name", "==", targetName));
-                    getDocs(q).then(snap => {
+                    const snap = await getDocs(q);
                         if (!snap.empty) {
                             const generatedCard = { ...snap.docs[0].data() };
-                            if (isPlayerContext && localPlayerHand.length < 10) { triggerPopup(`[${targetName}]を手札に生成`); setLocalPlayerHand(prev => [...prev, generatedCard]); }
-                            else if (!isPlayerContext && localEnemyHand.length < 10) { triggerPopup(`相手が手札に[${targetName}]を生成`); setLocalEnemyHand(prev => [...prev, generatedCard]); }
+                            if (!localStateRef.current || localStateRef.current.localGameState !== 'playing') return;
+                            const setHand = isPlayerContext ? setLocalPlayerHand : setLocalEnemyHand;
+                            setHand(prev => prev.length < BATTLE_CONFIG.MAX_HAND_SIZE ? [...prev, generatedCard] : prev);
                         }
-                    });
                 } catch (error) { console.error(error); }
                 break;
             }
@@ -244,14 +311,14 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 if (isPlayerContext) {
                     setLocalEnemyField(prev => {
                         if (prev.length === 0) return prev;
-                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        let n = prev.map(c => ({ ...c })); const idx = Math.floor(Math.random() * n.length);
                         triggerPopup(`[${card.name}]の効果！相手の[${n[idx].name}]を破壊！`);
                         n[idx].hp = 0; return n;
                     });
                 } else {
                     setLocalPlayerField(prev => {
                         if (prev.length === 0) return prev;
-                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        let n = prev.map(c => ({ ...c })); const idx = Math.floor(Math.random() * n.length);
                         triggerPopup(`相手の[${card.name}]が味方の[${n[idx].name}]を破壊！`);
                         n[idx].hp = 0; return n;
                     });
@@ -261,14 +328,14 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 if (isPlayerContext) {
                     setLocalEnemyField(prev => {
                         if (prev.length === 0) return prev;
-                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        let n = prev.map(c => ({ ...c })); const idx = Math.floor(Math.random() * n.length);
                         triggerPopup(`[${card.name}]の効果！[${n[idx].name}]に${val}ダメージ！`);
                         n[idx].hp -= val; return n;
                     });
                 } else {
                     setLocalPlayerField(prev => {
                         if (prev.length === 0) return prev;
-                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        let n = prev.map(c => ({ ...c })); const idx = Math.floor(Math.random() * n.length);
                         triggerPopup(`相手が味方の[${n[idx].name}]に${val}ダメージ！`);
                         n[idx].hp -= val; return n;
                     });
@@ -278,14 +345,14 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 if (isPlayerContext) {
                     setLocalPlayerField(prev => {
                         if (prev.length === 0) return prev;
-                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        let n = prev.map(c => ({ ...c })); const idx = Math.floor(Math.random() * n.length);
                         triggerPopup(`[${card.name}]の効果！味方の[${n[idx].name}]を強化`);
                         n[idx].power += val; n[idx].hp += val; return n;
                     });
                 } else {
                     setLocalEnemyField(prev => {
                         if (prev.length === 0) return prev;
-                        let n = [...prev]; const idx = Math.floor(Math.random() * n.length);
+                        let n = prev.map(c => ({ ...c })); const idx = Math.floor(Math.random() * n.length);
                         triggerPopup(`相手が[${n[idx].name}]を強化！`);
                         n[idx].power += val; n[idx].hp += val; return n;
                     });
@@ -307,7 +374,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         switch (card.effectType) {
             case "gain_mana": {
                 let hand = [...getVal(`${mPath}.hand`, isPlayerContext ? playerHand : enemyHand)];
-                for (let i = 0; i < val; i++) if (hand.length < 10) hand.push(JSON.parse(JSON.stringify(MANA_CARD)));
+                for (let i = 0; i < val; i++) if (hand.length < BATTLE_CONFIG.MAX_HAND_SIZE) hand.push(JSON.parse(JSON.stringify(MANA_CARD)));
                 updates[`${mPath}.hand`] = hand;
                 triggerPopup(`マナ結晶を${val}枚獲得`);
                 break;
@@ -325,6 +392,30 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 break;
             }
             // 🌟 以下の4つのケースを追加
+            case "buff_all_allies": {
+                const field = getVal(`${mPath}.field`, isPlayerContext ? playerField : enemyField);
+                updates[`${mPath}.field`] = field.map(c => ({ ...c, power: (c.power || 0) + val, hp: (c.hp || 0) + val }));
+                break;
+            }
+            case "damage_single_enemy":
+            case "destroy_single_enemy": {
+                const field = [...getVal(`${ePath}.field`, isPlayerContext ? enemyField : playerField)];
+                if (field.length > 0) {
+                    const idx = Math.floor(Math.random() * field.length);
+                    field[idx] = { ...field[idx], hp: card.effectType === 'destroy_single_enemy' ? 0 : field[idx].hp - val };
+                    updates[`${ePath}.field`] = field;
+                }
+                break;
+            }
+            case "buff_single_ally": {
+                const field = [...getVal(`${mPath}.field`, isPlayerContext ? playerField : enemyField)];
+                if (field.length > 0) {
+                    const idx = Math.floor(Math.random() * field.length);
+                    field[idx] = { ...field[idx], hp: (field[idx].hp || 0) + val, power: (field[idx].power || 0) + val };
+                    updates[`${mPath}.field`] = field;
+                }
+                break;
+            }
             case "buff_power_all_allies": {
                 let field = [...getVal(`${mPath}.field`, isPlayerContext ? playerField : enemyField)];
                 updates[`${mPath}.field`] = field.map(c => ({ ...c, power: (c.power || 0) + val }));
@@ -342,7 +433,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 if (field.length > 0) {
                     const idx = Math.floor(Math.random() * field.length);
                     triggerPopup(isPlayerContext ? `[${card.name}]の効果！味方の[${field[idx].name}]の攻撃力を強化` : `相手が[${field[idx].name}]の攻撃力を強化！`);
-                    field[idx].power += val;
+                    field[idx] = { ...field[idx], power: (field[idx].power || 0) + val };
                     updates[`${mPath}.field`] = field;
                 }
                 break;
@@ -352,7 +443,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 if (field.length > 0) {
                     const idx = Math.floor(Math.random() * field.length);
                     triggerPopup(isPlayerContext ? `[${card.name}]の効果！味方の[${field[idx].name}]の体力を強化` : `相手が[${field[idx].name}]の体力を強化！`);
-                    field[idx].hp += val;
+                    field[idx] = { ...field[idx], hp: (field[idx].hp || 0) + val };
                     updates[`${mPath}.field`] = field;
                 }
                 break;
@@ -368,7 +459,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 let deck = [...getVal(`${mPath}.deck`, isPlayerContext ? playerDeck : enemyDeck)];
                 let hand = [...getVal(`${mPath}.hand`, isPlayerContext ? playerHand : enemyHand)];
                 const matchIdx = deck.findIndex(c => c.name === targetName);
-                if (matchIdx !== -1 && hand.length < 10) {
+                if (matchIdx !== -1 && hand.length < BATTLE_CONFIG.MAX_HAND_SIZE) {
                     hand.push(deck[matchIdx]);
                     deck = deck.filter((_, idx) => idx !== matchIdx).sort(() => Math.random() - 0.5);
                     updates[`${mPath}.deck`] = deck;
@@ -385,7 +476,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 const matchIdx = deck.findIndex(c => c.name === targetName);
 
                 // フィールドの空きが4枠未満（つまり出せる空きがある）なら召喚
-                if (matchIdx !== -1 && field.length < 4) {
+                if (matchIdx !== -1 && field.length < BATTLE_CONFIG.MAX_FIELD_SIZE) {
                     field.push({
                         ...deck[matchIdx],
                         hasAttacked: true, // 召喚酔い
@@ -410,7 +501,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
                 const targetName = card.effectTargetName ? card.effectTargetName.trim() : "";
                 if (!targetName) break;
                 let hand = [...getVal(`${mPath}.hand`, isPlayerContext ? playerHand : enemyHand)];
-                if (hand.length < 10) {
+                if (hand.length < BATTLE_CONFIG.MAX_HAND_SIZE) {
                     try {
                         const q = query(collection(db, "cards"), where("name", "==", targetName));
                         const snap = await getDocs(q);
@@ -465,10 +556,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             }
             case "damage_all_enemies": {
                 let field = [...getVal(`${ePath}.field`, isPlayerContext ? enemyField : playerField)];
-                let grave = [...getVal(`${ePath}.graveyard`, isPlayerContext ? enemyGrave : playerGrave)];
-                const dmgField = field.map(c => ({ ...c, hp: c.hp - val }));
-                updates[`${ePath}.field`] = dmgField.filter(c => c.hp > 0);
-                updates[`${ePath}.graveyard`] = [...grave, ...dmgField.filter(c => c.hp <= 0 && !c.isMana)];
+                updates[`${ePath}.field`] = field.map(c => ({ ...c, hp: c.hp - val }));
                 break;
             }
         }
@@ -496,8 +584,12 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             for (const c of enDead) {
                 if (c.trigger === "death") await executeSkillPvP(c, false, updates);
             }
+            await processDeathsPvP(updates);
         }
     };
+
+    const notifyBattle = useEffectEvent(triggerPopup);
+    const executeDeathSkill = useEffectEvent(executeSkillLocal);
 
     useEffect(() => {
         if (isPvP) return;
@@ -507,28 +599,29 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         pDeck.sort(() => Math.random() - 0.5);
         eDeck.sort(() => Math.random() - 0.5);
 
-        const pHand = []; for (let i = 0; i < 4; i++) if (pDeck.length > 0) pHand.push(pDeck.shift());
+        const isPlayerFirst = Math.random() < 0.5;
+        const pHand = drawInitialHand(pDeck, isPlayerFirst ? BATTLE_CONFIG.INITIAL_DRAW_PLAYER : BATTLE_CONFIG.INITIAL_DRAW_ENEMY);
         pHand.push(JSON.parse(JSON.stringify(MANA_CARD)));
-        const eHand = []; for (let i = 0; i < 3; i++) if (eDeck.length > 0) eHand.push(eDeck.shift());
+        const eHand = drawInitialHand(eDeck, isPlayerFirst ? BATTLE_CONFIG.INITIAL_DRAW_ENEMY : BATTLE_CONFIG.INITIAL_DRAW_PLAYER);
         eHand.push(JSON.parse(JSON.stringify(MANA_CARD)));
 
-        setTimeout(() => {
-            setLocalPlayerMaxLife(20); setLocalEnemyMaxLife(20); setLocalPlayerLife(20); setLocalEnemyLife(20);
+        const timer = setTimeout(() => {
+            setLocalPlayerMaxLife(BATTLE_CONFIG.INITIAL_LIFE); setLocalEnemyMaxLife(BATTLE_CONFIG.INITIAL_LIFE); setLocalPlayerLife(BATTLE_CONFIG.INITIAL_LIFE); setLocalEnemyLife(BATTLE_CONFIG.INITIAL_LIFE);
             setLocalPlayerDeck(pDeck); setLocalPlayerHand(pHand); setLocalEnemyDeck(eDeck); setLocalEnemyHand(eHand);
             setLocalPlayerField([]); setLocalEnemyField([]); setLocalPlayerGrave([]); setLocalEnemyGrave([]);
             setLocalGameState('playing'); setSelectedAttackerIdx(null); setPendingTarget(null);
 
             // 🌟 追加：コイントス処理
-            const isPlayerFirst = Math.random() < 0.5;
             setLocalIsPlayerTurn(isPlayerFirst); // ランダムでターン決定
             
             if (isPlayerFirst) {
-                triggerPopup("コイントス結果：先攻です！");
+                notifyBattle("コイントス結果：先攻です！");
             } else {
-                triggerPopup("コイントス結果：後攻です（相手のターン）");
+                notifyBattle("コイントス結果：後攻です（相手のターン）");
                 setPendingCpuStart(true); // 後攻ならCPUのターンを予約
             }
         }, 0);
+        return () => clearTimeout(timer);
     }, [isPvP, playerDeckData, enemyDeckData]);
 
     useEffect(() => {
@@ -539,25 +632,26 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         const eGoldCount = localEnemyHand.filter(c => c?.name === "黄金").length;
 
         if (pGoldCount >= 5 || eGoldCount >= 5 || localEnemyLife <= 0 || localPlayerLife <= 0) {
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 if (pGoldCount >= 5) {
                     setLocalGameState('win');
                     playSE('勝利');
-                    triggerPopup("特殊勝利：黄金を5枚集めた！");
+                    notifyBattle("特殊勝利：黄金を5枚集めた！");
                 } else if (eGoldCount >= 5) {
                     setLocalGameState('lose');
                     playSE('敗北');
-                    triggerPopup("特殊敗北：相手が黄金を集めきった…");
+                    notifyBattle("特殊敗北：相手が黄金を集めきった…");
                 } else if (localEnemyLife <= 0) {
                     playSE('勝利');
                     setLocalGameState('win');
-                    triggerPopup("YOU WIN");
+                    notifyBattle("YOU WIN");
                 } else if (localPlayerLife <= 0) {
                     playSE('敗北');
                     setLocalGameState('lose');
-                    triggerPopup("YOU LOSE");
+                    notifyBattle("YOU LOSE");
                 }
             }, 0);
+            return () => clearTimeout(timer);
         }
     }, [isPvP, localPlayerLife, localEnemyLife, localPlayerHand, localEnemyHand, localGameState]);
 
@@ -567,31 +661,50 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         const deadE = localEnemyField.filter(c => c && c.hp <= 0 && !c.isMana);
 
         if (deadP.length > 0 || deadE.length > 0) {
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 if (deadP.length > 0) {
                     playSE('破壊');
-                    deadP.forEach(c => { if (c.trigger === "death") executeSkillLocal(c, true); });
+                    deadP.forEach(c => { if (c.trigger === "death") executeDeathSkill(c, true); });
                     setLocalPlayerGrave(p => [...p, ...deadP]);
                     setLocalPlayerField(p => p.filter(c => c.hp > 0));
                 }
                 if (deadE.length > 0) {
                     playSE('破壊');
-                    deadE.forEach(c => { if (c.trigger === "death") executeSkillLocal(c, false); });
+                    deadE.forEach(c => { if (c.trigger === "death") executeDeathSkill(c, false); });
                     setLocalEnemyGrave(p => [...p, ...deadE]);
                     setLocalEnemyField(p => p.filter(c => c.hp > 0));
                 }
             }, 0);
+            return () => clearTimeout(timer);
         }
     }, [isPvP, localPlayerField, localEnemyField, localGameState]);
 
-    const pushGameStateToDB = async (updates) => {
+    const commitGameUpdates = async (updates) => {
+        if (!isPvP) {
+            const setters = {
+                [`${myPath}.hp`]: setLocalPlayerLife,
+                [`${myPath}.maxHp`]: setLocalPlayerMaxLife,
+                [`${myPath}.deck`]: setLocalPlayerDeck,
+                [`${myPath}.hand`]: setLocalPlayerHand,
+                [`${myPath}.field`]: setLocalPlayerField,
+                [`${myPath}.graveyard`]: setLocalPlayerGrave,
+                [`${enemyPath}.hp`]: setLocalEnemyLife,
+                [`${enemyPath}.maxHp`]: setLocalEnemyMaxLife,
+                [`${enemyPath}.deck`]: setLocalEnemyDeck,
+                [`${enemyPath}.hand`]: setLocalEnemyHand,
+                [`${enemyPath}.field`]: setLocalEnemyField,
+                [`${enemyPath}.graveyard`]: setLocalEnemyGrave,
+            };
+            for (const [path, value] of Object.entries(updates)) setters[path]?.(value);
+            return;
+        }
         if (!roomId) return;
         try { await updateDoc(doc(db, 'rooms', roomId), updates); } catch (e) { console.error(e); }
     };
 
     const checkGameEndPvP = (updates, nPLife, nELife, nPHand, nEHand) => {
-        if (nPHand.filter(c => c?.name === "黄金").length >= 6) { updates['status'] = 'finished'; updates['winner'] = myRole; return; }
-        if (nEHand.filter(c => c?.name === "黄金").length >= 6) { updates['status'] = 'finished'; updates['winner'] = enemyRole; return; }
+        if (nPHand.filter(c => c?.name === "黄金").length >= BATTLE_CONFIG.GOLD_WIN_COUNT) { updates['status'] = 'finished'; updates['winner'] = myRole; return; }
+        if (nEHand.filter(c => c?.name === "黄金").length >= BATTLE_CONFIG.GOLD_WIN_COUNT) { updates['status'] = 'finished'; updates['winner'] = enemyRole; return; }
         if (nELife <= 0) { updates['status'] = 'finished'; updates['winner'] = myRole; }
         else if (nPLife <= 0) { updates['status'] = 'finished'; updates['winner'] = enemyRole; }
     };
@@ -600,7 +713,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         if (!isPlayerTurn || gameState !== 'playing' || pendingTarget) return;
         const cardToPlay = playerHand[handIndex];
         if (!cardToPlay || cardToPlay.isMana) return;
-        if (cardToPlay.cardType !== "magic" && playerField.length >= 4) { triggerPopup("フィールドが満杯です"); return; }
+        if (cardToPlay.cardType !== "magic" && playerField.length >= BATTLE_CONFIG.MAX_FIELD_SIZE) { triggerPopup("フィールドが満杯です"); return; }
 
         const reqCost = cardToPlay.cost !== undefined ? cardToPlay.cost : 1;
         let consumedManaIndices = [];
@@ -609,11 +722,8 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         if (cardToPlay.costType === "hp") {
             if (playerLife <= reqCost) { triggerPopup("ライフコストが足りない"); return; }
             triggerPopup(`ライフコスト支払 (ライフ -${reqCost})`);
-            if (isPvP) {
-                updates[`${myPath}.maxHp`] = playerMaxLife - reqCost; updates[`${myPath}.hp`] = playerLife - reqCost;
-            } else {
-                setLocalPlayerMaxLife(p => p - reqCost); setLocalPlayerLife(p => p - reqCost);
-            }
+            updates[`${myPath}.maxHp`] = playerMaxLife - reqCost;
+            updates[`${myPath}.hp`] = playerLife - reqCost;
         } else {
             const available = playerHand.map((c, i) => c.isMana ? i : -1).filter(i => i !== -1);
             if (available.length < reqCost) { triggerPopup("マナが足りません"); return; }
@@ -631,13 +741,13 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             return;
         }
 
-        finishPlayCard(handIndex, consumedManaIndices, cardToPlay, updates);
+        return finishPlayCard(handIndex, consumedManaIndices, cardToPlay, updates);
     };
 
     const finishPlayCard = async (handIndex, consumedManaIndices, cardToPlay, initialUpdates = {}) => {
         let newHand = playerHand.filter((_, idx) => idx !== handIndex && !consumedManaIndices.includes(idx));
         let nextGrave = [...playerGrave];
-        let nextField = [...playerField];
+        let nextField = [...(initialUpdates[`${myPath}.field`] ?? playerField)];
 
         if (cardToPlay.cardType === "magic") {
             triggerPopup(`${cardToPlay.name}を発動`); nextGrave.push(cardToPlay);
@@ -655,43 +765,28 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
 
         const isEffectActivatable = cardToPlay.trigger === "play" || cardToPlay.cardType === "magic";
 
-        if (isPvP) {
-            let updates = { ...initialUpdates };
-            updates[`${myPath}.hand`] = newHand;
-            updates[`${myPath}.graveyard`] = nextGrave;
-            updates[`${myPath}.field`] = nextField;
+        let updates = { ...initialUpdates };
+        updates[`${myPath}.hand`] = newHand;
+        updates[`${myPath}.graveyard`] = nextGrave;
+        updates[`${myPath}.field`] = nextField;
 
-            if (isEffectActivatable && !TARGETED_EFFECTS.includes(cardToPlay.effectType)) {
-                await executeSkillPvP(cardToPlay, true, updates);
-            }
-
-            await processDeathsPvP(updates);
-            checkGameEndPvP(updates, updates[`${myPath}.hp`] ?? playerLife, updates[`${enemyPath}.hp`] ?? enemyLife, updates[`${myPath}.hand`] ?? newHand, enemyHand);
-            await pushGameStateToDB(updates);
-        } else {
-            setLocalPlayerHand(newHand); setLocalPlayerGrave(nextGrave); setLocalPlayerField(nextField);
-            if (isEffectActivatable && !TARGETED_EFFECTS.includes(cardToPlay.effectType)) {
-                if (cardToPlay.effectType === "draw_card") {
-                    const res = processDraw(cardToPlay.effectValue, localPlayerDeck, newHand, nextGrave, localPlayerLife);
-                    setLocalPlayerDeck(res.d); setLocalPlayerHand(res.h); setLocalPlayerGrave(res.g); setLocalPlayerLife(res.life);
-                } else if (cardToPlay.effectType === "damage_all_enemies") {
-                    const dmgField = localEnemyField.map(c => ({ ...c, hp: c.hp - cardToPlay.effectValue }));
-                    setLocalEnemyGrave(g => [...g, ...dmgField.filter(c => c.hp <= 0 && !c.isMana)]);
-                    setLocalEnemyField(dmgField.filter(c => c.hp > 0));
-                } else {
-                    executeSkillLocal(cardToPlay, true);
-                }
-            }
+        if (isEffectActivatable && !TARGETED_EFFECTS.includes(cardToPlay.effectType)) {
+            await executeSkillPvP(cardToPlay, true, updates);
         }
+
+        await processDeathsPvP(updates);
+        checkGameEndPvP(updates, updates[`${myPath}.hp`] ?? playerLife, updates[`${enemyPath}.hp`] ?? enemyLife, updates[`${myPath}.hand`] ?? newHand, updates[`${enemyPath}.hand`] ?? enemyHand);
+        await commitGameUpdates(updates);
     };
 
     const resolveTargetedPlay = async (targetIdx, isEnemyTarget) => {
-        if (!pendingTarget || gameState !== 'playing') return;
+        if (!pendingTarget || !isPlayerTurn || gameState !== 'playing') return;
         const { handIndex, card, consumedManaIndices, initialUpdates } = pendingTarget;
 
         let extraUpdates = { ...initialUpdates };
         let currentEnemyField = [...(isPvP ? enemyField : localEnemyField)];
         let currentPlayerField = [...(isPvP ? playerField : localPlayerField)];
+        if (!(isEnemyTarget ? currentEnemyField : currentPlayerField)[targetIdx]) return;
 
         if (card.effectType.includes("enemy") && isEnemyTarget) {
             let target = { ...currentEnemyField[targetIdx] };
@@ -706,11 +801,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             }
             currentEnemyField[targetIdx] = target;
 
-            if (isPvP) {
-                extraUpdates[`${enemyPath}.field`] = currentEnemyField;
-            } else {
-                setLocalEnemyField(currentEnemyField);
-            }
+            extraUpdates[`${enemyPath}.field`] = currentEnemyField;
 
         } else if (card.effectType.includes("ally") && !isEnemyTarget) {
             let target = { ...currentPlayerField[targetIdx] };
@@ -737,8 +828,7 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
 
             currentPlayerField[targetIdx] = target;
 
-            if (isPvP) extraUpdates[`${myPath}.field`] = currentPlayerField;
-            else setLocalPlayerField(currentPlayerField);
+            extraUpdates[`${myPath}.field`] = currentPlayerField;
         } else {
             triggerPopup("対象が不正なためキャンセルしました");
             setPendingTarget(null);
@@ -746,100 +836,82 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         }
 
         setPendingTarget(null);
-        finishPlayCard(handIndex, consumedManaIndices, card, extraUpdates);
+        return finishPlayCard(handIndex, consumedManaIndices, card, extraUpdates);
     };
 
     const handleSelectAttacker = (fieldIndex) => {
         if (!isPlayerTurn || gameState !== 'playing') return;
-        if (pendingTarget) { resolveTargetedPlay(fieldIndex, false); return; }
-        if (playerField[fieldIndex].hasAttacked) return;
+        if (pendingTarget) return resolveTargetedPlay(fieldIndex, false);
+        if (!playerField[fieldIndex] || playerField[fieldIndex].hasAttacked) return;
         setSelectedAttackerIdx(selectedAttackerIdx === fieldIndex ? null : fieldIndex);
     };
 
     const handleFightMinion = async (enemyFieldIndex) => {
         if (!isPlayerTurn || gameState !== 'playing') return;
-        if (pendingTarget) { resolveTargetedPlay(enemyFieldIndex, true); return; }
+        if (pendingTarget) return resolveTargetedPlay(enemyFieldIndex, true);
 
-        if (selectedAttackerIdx === null) return;
+        if (selectedAttackerIdx === null || !playerField[selectedAttackerIdx] || playerField[selectedAttackerIdx].hasAttacked || !enemyField[enemyFieldIndex]) return;
         const attacker = { ...playerField[selectedAttackerIdx] };
-        const defender = { ...enemyField[enemyFieldIndex] };
         triggerPopup(`${attacker.name}の攻撃`);
 
-        if (isPvP) {
-            let updates = {};
-            if (attacker.trigger === "attack") await executeSkillPvP(attacker, true, updates);
+        let updates = {};
+        if (attacker.trigger === "attack") await executeSkillPvP(attacker, true, updates);
 
-            let currentPField = updates[`${myPath}.field`] || [...playerField];
-            let currentEField = updates[`${enemyPath}.field`] || [...enemyField];
+        let currentPField = updates[`${myPath}.field`] || [...playerField];
+        let currentEField = updates[`${enemyPath}.field`] || [...enemyField];
 
-            let a = { ...currentPField[selectedAttackerIdx] };
-            let d = { ...currentEField[enemyFieldIndex] };
+        let a = { ...currentPField[selectedAttackerIdx] };
+        let d = { ...currentEField[enemyFieldIndex] };
 
+        if (a.hp > 0 && d.hp > 0) {
             a.hp -= (d.power || 0);
             d.hp -= (a.power || 0);
-            a.hasAttacked = true;
-
-            currentPField[selectedAttackerIdx] = a;
-            currentEField[enemyFieldIndex] = d;
-
-            updates[`${myPath}.field`] = currentPField;
-            updates[`${enemyPath}.field`] = currentEField;
-
-            await processDeathsPvP(updates);
-            setSelectedAttackerIdx(null);
-            await pushGameStateToDB(updates);
-        } else {
-            if (attacker.trigger === "attack") executeSkillLocal(attacker, true);
-            playSE('ダメージ');
-            attacker.hp -= (defender.power || 0); defender.hp -= (attacker.power || 0);
-            attacker.hasAttacked = true;
-            let nPField = playerField.map((c, i) => i === selectedAttackerIdx ? attacker : c);
-            let nEField = enemyField.map((c, i) => i === enemyFieldIndex ? defender : c);
-
-            setLocalPlayerField(nPField.filter(c => c.hp > 0));
-            setLocalPlayerGrave(g => [...g, ...nPField.filter(c => c.hp <= 0 && !c.isMana)]);
-            setLocalEnemyField(nEField.filter(c => c.hp > 0));
-            setLocalEnemyGrave(g => [...g, ...nEField.filter(c => c.hp <= 0 && !c.isMana)]);
-            setSelectedAttackerIdx(null);
         }
+        a.hasAttacked = true;
+
+        currentPField[selectedAttackerIdx] = a;
+        currentEField[enemyFieldIndex] = d;
+
+        updates[`${myPath}.field`] = currentPField;
+        updates[`${enemyPath}.field`] = currentEField;
+        playSE('ダメージ');
+
+        await processDeathsPvP(updates);
+        checkGameEndPvP(updates, updates[`${myPath}.hp`] ?? playerLife, updates[`${enemyPath}.hp`] ?? enemyLife, updates[`${myPath}.hand`] ?? playerHand, updates[`${enemyPath}.hand`] ?? enemyHand);
+        setSelectedAttackerIdx(null);
+        await commitGameUpdates(updates);
     };
 
     const handleDirectAttack = async () => {
-        if (selectedAttackerIdx === null || !isPlayerTurn || gameState !== 'playing') return;
+        if (pendingTarget || selectedAttackerIdx === null || !isPlayerTurn || gameState !== 'playing') return;
         const attacker = playerField[selectedAttackerIdx];
+        if (!attacker || attacker.hasAttacked) return;
         triggerPopup(`ダイレクトアタック`);
 
-        if (isPvP) {
-            let updates = {};
-            if (attacker.trigger === "attack") await executeSkillPvP(attacker, true, updates);
+        let updates = {};
+        if (attacker.trigger === "attack") await executeSkillPvP(attacker, true, updates);
 
-            let eHp = updates[`${enemyPath}.hp`] !== undefined ? updates[`${enemyPath}.hp`] : enemyLife;
-            let currentPField = updates[`${myPath}.field`] || [...playerField];
+        let eHp = updates[`${enemyPath}.hp`] !== undefined ? updates[`${enemyPath}.hp`] : enemyLife;
+        let currentPField = updates[`${myPath}.field`] || [...playerField];
 
-            let a = { ...currentPField[selectedAttackerIdx] };
-            eHp = Math.max(0, eHp - (a.power || 0));
-            a.hasAttacked = true;
+        let a = { ...currentPField[selectedAttackerIdx] };
+        eHp = Math.max(0, eHp - (a.power || 0));
+        a.hasAttacked = true;
 
-            currentPField[selectedAttackerIdx] = a;
-            updates[`${enemyPath}.hp`] = eHp;
-            updates[`${myPath}.field`] = currentPField;
+        currentPField[selectedAttackerIdx] = a;
+        updates[`${enemyPath}.hp`] = eHp;
+        updates[`${myPath}.field`] = currentPField;
 
-            await processDeathsPvP(updates);
-            checkGameEndPvP(updates, playerLife, eHp, playerHand, enemyHand);
-            setSelectedAttackerIdx(null);
-            await pushGameStateToDB(updates);
+        await processDeathsPvP(updates);
+        checkGameEndPvP(updates, updates[`${myPath}.hp`] ?? playerLife, updates[`${enemyPath}.hp`] ?? eHp, updates[`${myPath}.hand`] ?? playerHand, updates[`${enemyPath}.hand`] ?? enemyHand);
+        setSelectedAttackerIdx(null);
+        await commitGameUpdates(updates);
 
-        } else {
-            if (attacker.trigger === "attack") executeSkillLocal(attacker, true);
-            const nextELife = Math.max(0, enemyLife - (attacker.power || 0));
-            const nPField = playerField.map((c, i) => i === selectedAttackerIdx ? { ...c, hasAttacked: true } : c);
-            setLocalEnemyLife(nextELife); setLocalPlayerField(nPField); setSelectedAttackerIdx(null);
-        }
         playSE('ダメージ');
     };
 
     const endPlayerTurn = async () => {
-        if (gameState !== 'playing' || pendingTarget) return;
+        if ((!isPlayerTurn && !pendingCpuStart) || gameState !== 'playing' || pendingTarget) return;
 
         if (isPvP) {
             setSelectedAttackerIdx(null);
@@ -880,176 +952,148 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
             updates["turnCount"] = roomData.turnCount + (myRole === 'guest' ? 1 : 0);
 
             checkGameEndPvP(updates, updates[`${myPath}.hp`] ?? playerLife, updates[`${enemyPath}.hp`] ?? enemyLife, updates[`${myPath}.hand`] ?? playerHand, updates[`${enemyPath}.hand`] ?? enemyHand);
-            pushGameStateToDB(updates);
+            await commitGameUpdates(updates);
             return;
         }
 
-        // 🤖 CPU処理
+        // CPUターン中は、待機のたびに最新の盤面を読み直す。
         setLocalIsPlayerTurn(false);
         setSelectedAttackerIdx(null);
-
-        // プレイヤーのターン終了時効果
-        localPlayerField.forEach(c => { if (c.trigger === "turn_end") executeSkillLocal(c, true); });
-
-        // プレイヤーのドロー計算 (最新のライフを上書きしないよう、差分だけを計算しておく)
-        let pDrawRes = processDraw(1, localPlayerDeck, localPlayerHand, localPlayerGrave, localPlayerLife);
-        if (pDrawRes.h.length < 10) pDrawRes.h.push(JSON.parse(JSON.stringify(MANA_CARD)));
-        const playerFatigueDamage = localPlayerLife - pDrawRes.life;
-
-        // CPUのターン開始を少し待機
-        setTimeout(async () => {
-            if (localGameState !== 'playing') return;
-
-            // CPUのドロー
-            let eDrawRes = processDraw(1, localEnemyDeck, localEnemyHand, localEnemyGrave, localEnemyLife);
-            if (eDrawRes.h.length < 10) eDrawRes.h.push(JSON.parse(JSON.stringify(MANA_CARD)));
-            playSE('ドロー'); // 🌟 修正：CPUがカードをドローする音を再生
-            let currentEField = [...localEnemyField];
-            let currentEnemyHand = [...eDrawRes.h];
-            let currentPlayerField = [...localPlayerField];
-            let loopSafety = 0;
-
-            // ターン開始時効果
-            currentEField.forEach(c => { if (c.trigger === "turn_start") executeSkillLocal(c, false); });
-
-            // 【召喚フェイズ】
-            while (currentEField.length < 4 && loopSafety < 10) {
-                loopSafety++;
-                const aiMana = currentEnemyHand.filter(c => c.isMana).length;
-                const playable = currentEnemyHand
-                    .map((c, i) => ({ card: c, originalIdx: i }))
-                    .filter(item => !item.card.isMana && item.card.cardType !== 'magic' && aiMana >= (item.card.cost || 1))
-                    .sort((a, b) => (b.card.cost || 0) - (a.card.cost || 0));
-
-                if (playable.length === 0) break;
-
-                const targetItem = playable[0];
-                const cost = targetItem.card.cost || 1;
-
-                // 手札から対象のカードを削除
-                currentEnemyHand.splice(targetItem.originalIdx, 1);
-
-                // マナを消費
-                let consumed = 0;
-                currentEnemyHand = currentEnemyHand.filter(c => !(c.isMana && consumed < cost && ++consumed));
-
-                triggerPopup(`相手が[${targetItem.card.name}]を召喚`);
-
-                const summoned = {
-                    ...targetItem.card,
-                    hasAttacked: true, // 召喚酔い
-                    originalHp: targetItem.card.originalHp ?? targetItem.card.hp,
-                    originalPower: targetItem.card.originalPower ?? targetItem.card.power
-                };
-
-                currentEField.push(summoned);
-                setLocalEnemyField([...currentEField]); // 描画を更新
-                setLocalEnemyHand([...currentEnemyHand]);
-
-                // 効果発動（少し待機して演出）
-                await new Promise(resolve => setTimeout(resolve, 800));
-                if (targetItem.card.trigger === "play") {
-                    await executeSkillLocal(targetItem.card, false);
+        const active = () => {
+            const s = localStateRef.current;
+            return s?.localGameState === 'playing' && s.localPlayerLife > 0 && s.localEnemyLife > 0 &&
+                s.localPlayerHand.filter(c => c.name === '黄金').length < BATTLE_CONFIG.GOLD_WIN_COUNT &&
+                s.localEnemyHand.filter(c => c.name === '黄金').length < BATTLE_CONFIG.GOLD_WIN_COUNT;
+        };
+        const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+        const applyDraw = (isPlayerContext) => {
+            const state = localStateRef.current;
+            const result = processDraw(1,
+                isPlayerContext ? state.localPlayerDeck : state.localEnemyDeck,
+                isPlayerContext ? state.localPlayerHand : state.localEnemyHand,
+                isPlayerContext ? state.localPlayerGrave : state.localEnemyGrave,
+                isPlayerContext ? state.localPlayerLife : state.localEnemyLife);
+            if (result.h.length < BATTLE_CONFIG.MAX_HAND_SIZE) result.h.push({ ...MANA_CARD });
+            if (isPlayerContext) {
+                setLocalPlayerDeck(result.d); setLocalPlayerHand(result.h);
+                setLocalPlayerGrave(result.g); setLocalPlayerLife(result.life);
+            } else {
+                setLocalEnemyDeck(result.d); setLocalEnemyHand(result.h);
+                setLocalEnemyGrave(result.g); setLocalEnemyLife(result.life);
+            }
+        };
+        const runTriggers = async (trigger, isPlayerContext) => {
+            const state = localStateRef.current;
+            if (!state) return;
+            const field = isPlayerContext ? state.localPlayerField : state.localEnemyField;
+            for (const card of field) {
+                if (!active()) return;
+                if (card.trigger === trigger) {
+                    await executeSkillLocal(card, isPlayerContext);
+                    await pause(0);
                 }
             }
+        };
 
-            setLocalEnemyDeck(eDrawRes.d);
+        if (!pendingCpuStart) await runTriggers('turn_end', true);
+        await pause(1200);
+        if (!active()) return;
+        applyDraw(false);
+        await pause(0);
+        if (!active()) return;
+        await runTriggers('turn_start', false);
 
-            // 【攻撃フェイズ】
-            // 🌟 修正: idではなく、配列の「インデックス番号」で確実に対象を特定する
-            let readyAttackers = currentEField
-                .map((c, i) => ({ card: { ...c }, index: i }))
-                .filter(item => !item.card.hasAttacked);
-
-            for (let { card: attacker, index: attackerIdx } of readyAttackers) {
-                if (localGameState !== 'playing') break;
-                if (attacker.hp <= 0) continue; // すでに死亡している場合はスキップ
-
-                // 攻撃演出のための待機
-                await new Promise(resolve => setTimeout(resolve, 1200));
-
-                if (attacker.trigger === "attack") {
-                    playSE('攻撃');
-                    await executeSkillLocal(attacker, false);
-                }
-
-                // 攻撃目標の選定（最新のプレイヤー盤面を参照）
-                let targetMinionIdx = currentPlayerField.findIndex(em => (attacker.power || 0) >= (em.hp || 0));
-
-                if (targetMinionIdx !== -1) {
-                    const targetMinion = { ...currentPlayerField[targetMinionIdx] };
-                    triggerPopup(`相手の[${attacker.name}]が[${targetMinion.name}]を攻撃`);
-
-                    targetMinion.hp -= (attacker.power || 0);
-                    attacker.hp -= (targetMinion.power || 0);
-
-                    // 墓地送り処理
-                    if (targetMinion.hp <= 0) {
-                        setLocalPlayerGrave(g => [...g, targetMinion]);
-                    }
-                    if (attacker.hp <= 0) {
-                        setLocalEnemyGrave(g => [...g, attacker]);
-                    }
-
-                    // 盤面更新
-                    currentPlayerField[targetMinionIdx] = targetMinion;
-                    currentPlayerField = currentPlayerField.filter(c => c.hp > 0);
-                    setLocalPlayerField([...currentPlayerField]);
-
-                    // インデックスを維持したまま更新
-                    currentEField[attackerIdx] = attacker;
-                    setLocalEnemyField(currentEField.filter(c => c.hp > 0));
-
-                } else {
-                    triggerPopup(`相手の[${attacker.name}]によるダイレクトアタック`);
-                    setLocalPlayerLife(prev => Math.max(0, prev - (attacker.power || 0)));
-                    playSE('ダメージ');
-                }
+        for (let attempts = 0; attempts < 10 && active(); attempts++) {
+            const state = localStateRef.current;
+            const mana = state.localEnemyHand.filter(c => c.isMana).length;
+            const playable = state.localEnemyHand
+                .map((card, index) => ({ card, index }))
+                .filter(({ card }) => !card.isMana &&
+                    (card.cardType === 'magic' || state.localEnemyField.length < BATTLE_CONFIG.MAX_FIELD_SIZE) &&
+                    (card.costType === 'hp' ? state.localEnemyLife > (card.cost ?? 1) : mana >= (card.cost ?? 1)))
+                .sort((a, b) => (b.card.cost ?? 1) - (a.card.cost ?? 1))[0];
+            if (!playable) break;
+            const { card, index } = playable;
+            let remainingCost = card.costType === 'hp' ? 0 : (card.cost ?? 1);
+            const hand = state.localEnemyHand.filter((c, i) => {
+                if (i === index) return false;
+                if (c.isMana && remainingCost > 0) { remainingCost--; return false; }
+                return true;
+            });
+            setLocalEnemyHand(hand);
+            if (card.costType === 'hp') {
+                setLocalEnemyLife(p => p - (card.cost ?? 1));
+                setLocalEnemyMaxLife(p => p - (card.cost ?? 1));
             }
-
-            // すべての攻撃が終わった後に、死亡したカードを盤面から消去
-            currentEField = currentEField.filter(c => c.hp > 0);
-
-            // 攻撃フェイズ終了時の待機
-            await new Promise(resolve => setTimeout(resolve, 1000));
-
-            // 【CPUターン終了処理】
-            let finalEField = currentEField.map(c => ({ ...c, hasAttacked: false }));
-            setLocalEnemyField(finalEField);
-
-            finalEField.forEach(c => { if (c.trigger === "turn_end") executeSkillLocal(c, false); });
-
-            // プレイヤーのターン開始処理
-            setLocalPlayerDeck(pDrawRes.d);
-            setLocalPlayerHand(pDrawRes.h);
-
-            // 🌟 修正: 直接ライフを上書きせず、もしファティーグ(山札切れ)ダメージを受けていたらそれだけを引く
-            if (playerFatigueDamage > 0) {
-                playSE('ダメージ');
-                setLocalPlayerLife(prev => Math.max(0, prev - playerFatigueDamage));
+            if (card.cardType === 'magic') {
+                setLocalEnemyGrave(g => [...g, card]);
+            } else {
+                setLocalEnemyField(f => [...f, {
+                    ...card, hasAttacked: true,
+                    originalHp: card.originalHp ?? card.hp,
+                    originalPower: card.originalPower ?? card.power,
+                }]);
             }
-            if (pDrawRes.g.length !== localPlayerGrave.length) {
-                const newGraveCards = pDrawRes.g.slice(localPlayerGrave.length);
-                setLocalPlayerGrave(prev => [...prev, ...newGraveCards]);
+            triggerPopup(`相手が[${card.name}]を使用`);
+            await pause(800);
+            if (!active()) return;
+            if (card.trigger === 'play' || card.cardType === 'magic') {
+                await executeSkillLocal(card, false);
+                await pause(0);
             }
+        }
 
-            setLocalPlayerField(prev => prev.map(c => ({ ...c, hasAttacked: false })));
-            setLocalIsPlayerTurn(true);
-
-            // プレイヤーのターン開始時効果
-            currentPlayerField.forEach(c => { if (c.trigger === "turn_start") executeSkillLocal(c, true); });
-
-        }, 1200);
+        while (active()) {
+            await pause(1200);
+            if (!active()) return;
+            let state = localStateRef.current;
+            const attackerIdx = state.localEnemyField.findIndex(c => c.hp > 0 && !c.hasAttacked);
+            if (attackerIdx === -1) break;
+            let attacker = state.localEnemyField[attackerIdx];
+            if (attacker.trigger === 'attack') {
+                await executeSkillLocal(attacker, false);
+                await pause(0);
+                if (!active()) return;
+                state = localStateRef.current;
+                attacker = state.localEnemyField[attackerIdx];
+                if (!attacker || attacker.hp <= 0) continue;
+            }
+            const targetIdx = state.localPlayerField.findIndex(c => c.hp > 0 && (attacker.power || 0) >= c.hp);
+            if (targetIdx === -1) {
+                triggerPopup(`相手の[${attacker.name}]によるダイレクトアタック`);
+                setLocalPlayerLife(p => Math.max(0, p - (attacker.power || 0)));
+                setLocalEnemyField(f => f.map((c, i) => i === attackerIdx ? { ...c, hasAttacked: true } : c));
+            } else {
+                const defender = state.localPlayerField[targetIdx];
+                triggerPopup(`相手の[${attacker.name}]が[${defender.name}]を攻撃`);
+                setLocalPlayerField(f => f.map((c, i) => i === targetIdx ? { ...c, hp: c.hp - (attacker.power || 0) } : c));
+                setLocalEnemyField(f => f.map((c, i) => i === attackerIdx ? { ...c, hp: c.hp - (defender.power || 0), hasAttacked: true } : c));
+            }
+            playSE('ダメージ');
+        }
+        if (!active()) return;
+        await runTriggers('turn_end', false);
+        await pause(0);
+        if (!active()) return;
+        setLocalEnemyField(f => f.map(c => ({ ...c, hasAttacked: false })));
+        applyDraw(true);
+        await pause(0);
+        if (!active()) return;
+        setLocalPlayerField(f => f.map(c => ({ ...c, hasAttacked: false })));
+        await runTriggers('turn_start', true);
+        if (active()) setLocalIsPlayerTurn(true);
     };
+    const startCpuTurn = useEffectEvent(() => performAction(endPlayerTurn));
      // 🌟 追加：後攻になった場合、最新のデータを使って安全にCPUのターンを開始する
     useEffect(() => {
         if (pendingCpuStart && localGameState === 'playing' && localPlayerHand.length > 0) {
             // 👇 setTimeoutで囲んで非同期処理（0秒遅延）にすることで警告を回避
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 setPendingCpuStart(false);
                 playSE('ドロー'); // 🌟 修正：CPUがカードをドローする音を再生
-                endPlayerTurn(); // 強制的にプレイヤーのターンを終了してCPUに渡す
+                startCpuTurn(); // 強制的にプレイヤーのターンを終了してCPUに渡す
             }, 0);
+            return () => clearTimeout(timer);
         }
     }, [pendingCpuStart, localGameState, localPlayerHand]);
 
@@ -1057,6 +1101,10 @@ export function useBattle({ isPvP, roomId, myRole, roomData, playerDeckData, ene
         playerMaxLife, enemyMaxLife, playerLife, enemyLife,
         playerDeck, playerHand, playerField, enemyDeck, enemyHand, enemyField, playerGrave, enemyGrave,
         isPlayerTurn, gameState, selectedAttackerIdx, pendingTarget, pendingPeeping,
-        playCard, endPlayerTurn, handleSelectAttacker, handleFightMinion, handleDirectAttack
+        playCard: (...args) => performAction(playCard, ...args),
+        endPlayerTurn: () => performAction(endPlayerTurn),
+        handleSelectAttacker: (...args) => performAction(handleSelectAttacker, ...args),
+        handleFightMinion: (...args) => performAction(handleFightMinion, ...args),
+        handleDirectAttack: () => performAction(handleDirectAttack)
     };
 }

@@ -1,0 +1,57 @@
+/* Viewport-sized board; every field and hand slot remains on screen. */
+#game-screen.battle-screen { max-width: none; height: 100dvh !important; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border-radius: 0; gap: 8px; }
+.battle-board { flex: 1; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) 24px minmax(0, 1fr); gap: 4px; }
+.battle-side, #enemy-area.battle-side { min-height: 0; margin: 0; padding: 8px; border: 1px solid #9f4947; background: #241f2580; border-radius: 8px; display: flex; flex-direction: column; gap: 6px; }
+.battle-side--player { border-color: #368d68; background: #182c2880; }
+.battle-status { display: flex; justify-content: space-between; align-items: center; gap: 6px; flex-shrink: 0; }
+.battle-status h2 { margin: 0; color: #f19187; font-size: 14px; white-space: nowrap; }
+.battle-side--player h2 { color: #76d8ac; }
+.battle-status h2 span { margin-left: 8px; }
+.battle-status > div { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.battle-status button { color: white; background: #425266; border: 0; border-radius: 4px; padding: 6px 10px; cursor: pointer; }
+.battle-field { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 130px)); justify-content: center; gap: 10px; padding: 5px; border: 1px dashed #ffffff25; border-radius: 6px; position: relative; }
+.battle-slot { min-width: 0; min-height: 0; }
+.battle-screen .game-card { --card-width: 100%; --card-height: 100%; }
+.battle-slot--selected .game-card { border-color: #f1c40f; box-shadow: 0 0 0 2px #f1c40f, 0 0 12px #f1c40f60; }
+.battle-empty { position: absolute; inset: 0; display: grid; place-items: center; color: #94a7b4; font-size: 12px; pointer-events: none; }
+.battle-turn { display: grid; place-items: center; color: #a8d6fc; font-size: 12px; }
+.battle-hand-area { height: 29%; min-height: 156px; flex-shrink: 0; display: flex; flex-direction: column; gap: 7px; border-top: 2px solid #bba050; padding: 6px 5px 0; }
+.battle-hand-label { display: flex; justify-content: space-between; color: #f1d479; font-size: 12px; }
+.battle-hand-label span { color: #aebdcc; font-size: 11px; }
+.battle-hand { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 110px)); gap: 7px; justify-content: center; padding-top: 4px; }
+.battle-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.battle-controls > span { margin-right: auto; font-size: 11px; color: #aebdcc; }
+.battle-controls .pc-menu-btn { padding: 7px 18px; font-size: 13px; min-height: 34px; }
+.battle-end { background: #ac6810; min-width: 125px; }
+.battle-end:disabled { background: #465362; cursor: not-allowed; }
+.battle-surrender { background: #833e3d; }
+@media (max-width: 600px) and (min-height: 501px) {
+  .battle-hand-area { height: 39%; min-height: 230px; }
+  .battle-hand { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 7px; }
+}
+@media (max-width: 600px) {
+  #game-screen.battle-screen { gap: 4px; }
+  .battle-status { flex-wrap: wrap; gap: 2px; }
+  .battle-status h2 { font-size: 12px; }
+  .battle-status > div { gap: 7px; font-size: 10px; }
+  .battle-status button { padding: 4px 7px; }
+  .battle-side, #enemy-area.battle-side { padding: 5px; gap: 3px; }
+  .battle-field { gap: 7px; }
+  .battle-controls > span { display: none; }
+  .battle-controls { justify-content: space-between; }
+  .battle-turn { font-size: 10px; }
+}
+@media (max-height: 500px) {
+  #game-screen.battle-screen { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(240px, 36%); gap: 8px; }
+  .battle-hand-area { height: 100%; min-height: 0; border-top: 0; border-left: 2px solid #bba050; padding-left: 8px; }
+  .battle-hand { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+  .battle-hand-label { flex-wrap: wrap; }
+  .battle-controls > span { display: none; }
+  .battle-controls .pc-menu-btn { padding: 6px; min-width: 0; flex: 1; }
+}
+@media (max-height: 500px) and (max-width: 750px) {
+  #game-screen.battle-screen { grid-template-columns: minmax(0, 1fr) minmax(270px, 44%); }
+  .battle-hand .game-card__stats { font-size: 10px; }
+  .battle-hand { gap: 5px; }
+  .battle-status { flex-wrap: wrap; }
+}

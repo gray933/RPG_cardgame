@@ -1,5 +1,5 @@
 // src/components/DevDashboard.jsx
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { collection, setDoc, doc, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import DeckBuilder from './DeckBuilder';
@@ -34,10 +34,6 @@ function DevDashboard({ onBack }) {
       console.error("カード一覧の取得に失敗:", error);
     }
   };
-
-  useEffect(() => {
-    fetchCards();
-  }, []);
 
   const handleRegister = async (e) => {
     e.preventDefault();

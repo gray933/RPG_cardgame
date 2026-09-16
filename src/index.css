@@ -27,3 +27,6 @@ html, body {
 * {
   box-sizing: border-box;
 }
+html, body { height: 100dvh; }
+.app-container:has(.battle-screen) { min-height: 100dvh !important; }
+[hidden] { display: none !important; }

@@ -11,6 +11,7 @@ import './App.css';
 import { bgmManager } from './utils/audioManager';
 import { SoundButton } from './components/SoundButton';
 import SettingsScreen from './components/SettingsScreen';
+import { hydrateDeck } from './utils/hydrateDeck';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -31,8 +32,8 @@ function App() {
   useEffect(() => {
       // 画面が「battle（バトル画面）」の時
       if (currentScreen === 'battle') {
-          // メイン画面のBGMを止める
-          bgmManager.stop();
+          // 子コンポーネントが開始した戦闘BGMを親のEffectで停止しない
+          bgmManager.play('maou_bgm_fantasy11.mp3');
       } 
       // それ以外の画面（title, home, deck_select, deck など）の時
       else {
@@ -122,17 +123,8 @@ function App() {
       const myDeckDocName = `deck_${currentUser.uid}_${slotNum}`;
       const playerDeckDoc = await getDoc(doc(db, "decks", myDeckDocName));
 
-      // 🌟 修正: 保存されているのが名前か実態か判定し、実データに復元する
       const loadedRawData = playerDeckDoc.exists() ? playerDeckDoc.data().cards || [] : [];
-      const loadedDeck = loadedRawData.map(item => {
-        if (typeof item === 'string') {
-          // 名前（文字列）で保存されている新形式なら、マスターデータから検索して最新版を取得
-          return allMasterCards.find(c => c.name === item);
-        } else {
-          // 昔のデータ（オブジェクト）が残っていればそのまま使うか、名前で再検索する
-          return allMasterCards.find(c => c.name === item.name) || item;
-        }
-      }).filter(Boolean); // 削除されて存在しないカードを弾く
+      const loadedDeck = hydrateDeck(loadedRawData, allMasterCards);
 
       setPlayerDeck(loadedDeck);
 
@@ -143,12 +135,8 @@ function App() {
         
         const enemyDeckDoc = await getDoc(doc(db, "decks", "enemy_deck_1"));
         
-        // 🌟 敵のデッキも最新能力になるように復元処理を通す
         const eRawData = enemyDeckDoc.exists() ? enemyDeckDoc.data().cards || [] : [];
-        const eDeck = eRawData.map(item => {
-           if (typeof item === 'string') return allMasterCards.find(c => c.name === item);
-           return allMasterCards.find(c => c.name === item.name) || item;
-        }).filter(Boolean);
+        const eDeck = hydrateDeck(eRawData, allMasterCards);
 
         setEnemyDeck(eDeck);
         setCurrentScreen('battle');
@@ -215,7 +203,7 @@ function App() {
   return (
     <div className="app-container" style={{ width: '100%', minHeight: '100vh', background: '#1e272e', position: 'relative' }}>
 
-      <div style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', alignItems: 'center', gap: '15px', zIndex: 90, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', border: '1px solid #485460' }}>
+      <div hidden={currentScreen === 'battle'} style={{ position: 'absolute', top: '15px', right: '15px', display: 'flex', alignItems: 'center', gap: '15px', zIndex: 90, background: 'rgba(0,0,0,0.5)', padding: '5px 15px', borderRadius: '20px', border: '1px solid #485460' }}>
         <span style={{ color: '#d2dae2', fontSize: '0.9rem' }}>👤 {userProfile.nickname}</span>
         <SoundButton
           onClick={handleLogout}

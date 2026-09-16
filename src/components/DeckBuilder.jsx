@@ -1,5 +1,5 @@
 // src/components/DeckBuilder.jsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { collection, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import Card from './Card';

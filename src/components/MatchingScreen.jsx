@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { doc, setDoc, getDoc, updateDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -17,7 +17,6 @@ const shuffleArray = (array) => {
 function MatchingScreen({ myDeck, playerName,onBattleStart, onBack }) {
   const [inputRoomId, setInputRoomId] = useState('');
   const [roomId, setRoomId] = useState('');
-  const [roomData, setRoomData] = useState(null);
   const [error, setError] = useState('');
   const [myRole, setMyRole] = useState(''); // 'host' or 'guest'
 
@@ -27,11 +26,11 @@ function MatchingScreen({ myDeck, playerName,onBattleStart, onBack }) {
     const guestDeck = shuffleArray(currentData.players.guest.deck);
 
     const hostHand = [];
-    for (let i = 0; i < 4; i++) if (hostDeck.length > 0) hostHand.push(hostDeck.shift());
+    for (let i = 0; i < 3; i++) if (hostDeck.length > 0) hostHand.push(hostDeck.shift());
     hostHand.push(JSON.parse(JSON.stringify(MANA_CARD)));
 
     const guestHand = [];
-    for (let i = 0; i < 3; i++) if (guestDeck.length > 0) guestHand.push(guestDeck.shift());
+    for (let i = 0; i < 4; i++) if (guestDeck.length > 0) guestHand.push(guestDeck.shift());
     guestHand.push(JSON.parse(JSON.stringify(MANA_CARD)));
 
     const roomRef = doc(db, 'rooms', targetRoomId);
@@ -134,7 +133,6 @@ function MatchingScreen({ myDeck, playerName,onBattleStart, onBack }) {
     const unsubscribe = onSnapshot(roomRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setRoomData(data);
 
         if (data.status === 'playing' && !data.isInitialized && myRole === 'host') {
           initializeGameByHost(roomId, data);
@@ -147,7 +145,7 @@ function MatchingScreen({ myDeck, playerName,onBattleStart, onBack }) {
     });
 
     return () => unsubscribe();
-  }, [roomId, myRole]);
+  }, [roomId, myRole, onBattleStart]);
 
   return (
     <div style={{ textAlign: 'center', padding: '80px 20px', color: 'white' }}>

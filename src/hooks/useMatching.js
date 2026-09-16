@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { doc, setDoc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase'; // Firebaseの初期化ファイル
 
+const generateRoomId = () => Math.random().toString(36).substring(2, 6).toUpperCase();
+
 export const useMatching = (myDeck, myName) => {
   const [roomId, setRoomId] = useState('');
   const [roomData, setRoomData] = useState(null);
@@ -11,7 +13,7 @@ export const useMatching = (myDeck, myName) => {
   // 1. 部屋を作る（ホスト）
   const createRoom = async () => {
     // 4桁のランダムなIDを生成（例: "A7B9"）
-    const newRoomId = Math.random().toString(36).substring(2, 6).toUpperCase();
+    const newRoomId = generateRoomId();
     const roomRef = doc(db, 'rooms', newRoomId);
 
     // 部屋の初期データをFirestoreに作成
@@ -37,7 +39,6 @@ export const useMatching = (myDeck, myName) => {
     });
 
     setRoomId(newRoomId);
-    listenToRoom(newRoomId); // 部屋の監視を開始
   };
 
   // 2. 部屋に入る（ゲスト）
@@ -72,12 +73,12 @@ export const useMatching = (myDeck, myName) => {
     });
 
     setRoomId(inputRoomId.toUpperCase());
-    listenToRoom(inputRoomId.toUpperCase());
   };
 
   // 3. 部屋の状態をリアルタイム監視
-  const listenToRoom = (id) => {
-    const roomRef = doc(db, 'rooms', id);
+  useEffect(() => {
+    if (!roomId) return;
+    const roomRef = doc(db, 'rooms', roomId);
     // onSnapshotを使うことで、Firestoreの変更が即座にroomDataに反映される
     const unsubscribe = onSnapshot(roomRef, (doc) => {
       if (doc.exists()) {
@@ -85,7 +86,7 @@ export const useMatching = (myDeck, myName) => {
       }
     });
     return unsubscribe;
-  };
+  }, [roomId]);
 
   return { createRoom, joinRoom, roomId, roomData, error };
 };

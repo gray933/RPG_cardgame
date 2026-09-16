@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { currentSeVolume, currentBgmVolume, setSeVolume, setBgmVolume, playSE } from '../utils/audioManager';
 import { SoundButton } from './SoundButton';
 

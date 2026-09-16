@@ -11,6 +11,7 @@ const SE_MAP = {
   "カード設置": "se_place_card.mp3",
   "魔法": "se_magic.mp3",
   "マナ回復": "se_mana_restore.mp3",
+  "マナ獲得": "se_mana_restore.mp3",
   "勝利": "se_victory.mp3",
   "敗北": "se_defeat.mp3",
   "強化": "se_buff.mp3",
