@@ -235,7 +235,7 @@ function BattleScreen({ playerDeckData, enemyDeckData, onBack, isPvP = false, ro
             {playerField.map((card, idx) => <div key={idx} className={`battle-slot ${selectedAttackerIdx === idx ? 'battle-slot--selected' : ''}`} onClick={() => handleSelectAttacker(idx)}>
               <Card cardData={card} statusText={pendingTarget ? '🎯 対象' : card.hasAttacked ? '行動済み' : selectedAttackerIdx === idx ? '選択中' : '攻撃可能'} />
             </div>)}
-            {!playerField.length && <span className="battle-empty">手札をタップ、またはここにドラッグ</span>}
+            {!playerField.length && <span className="battle-empty">手札をタップ</span>}
           </div>
         </section>
       </div>
